@@ -99,6 +99,21 @@ def create_resource_server(settings: ResourceServerSettings) -> FastMCP:
             "bearer_methods_supported": ["header"],
             "resource_documentation": f"{settings.server_url}/docs"
         })
+    
+    @app.custom_route("/.well-known/oauth-authorization-server/mcp", methods=["GET"])
+    async def oauth_authorization_server_metadata_for_mcp(request: Request):
+        """Resource-specific OAuth 2.0 Authorization Server Metadata for /mcp resource"""
+        return JSONResponse({
+            "issuer": str(settings.auth_server_url),
+            "authorization_endpoint": f"{settings.auth_server_url}/oauth/authorize",
+            "token_endpoint": f"{settings.auth_server_url}/oauth/token",
+            "introspection_endpoint": f"{settings.auth_server_url}/introspect",
+            "scopes_supported": [settings.mcp_scope],
+            "response_types_supported": ["code"],
+            "grant_types_supported": ["authorization_code"],
+            "token_endpoint_auth_methods_supported": ["client_secret_post"],
+            "resource": str(settings.server_url),  # Resource-specific binding
+        })
 
     @app.tool()
     async def get_time() -> dict[str, Any]:
