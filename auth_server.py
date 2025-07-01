@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import os
+import time
 
 import click
 from dotenv import load_dotenv
@@ -136,6 +137,52 @@ def create_authorization_server(server_settings: AuthServerSettings, auth_settin
         Route(
             "/introspect",
             endpoint=cors_middleware(introspect_handler, ["POST", "OPTIONS"]),
+            methods=["POST", "OPTIONS"],
+        )
+    )
+
+    # Add dynamic client registration endpoint (RFC 7591)
+    async def register_handler(request: Request) -> Response:
+        """
+        Dynamic Client Registration endpoint (RFC 7591).
+        
+        Allows Claude Code to register itself as an OAuth client.
+        """
+        try:
+            registration_data = await request.json()
+        except Exception:
+            return JSONResponse({"error": "invalid_request"}, status_code=400)
+        
+        # Generate client credentials
+        import secrets
+        client_id = f"claude-code-{secrets.token_hex(8)}"
+        client_secret = secrets.token_hex(32)
+        
+        # Store client (in production, save to database)
+        # For now, we'll just return the registration response
+        
+        # RFC 7591 client registration response
+        registration_response = {
+            "client_id": client_id,
+            "client_secret": client_secret,
+            "client_id_issued_at": int(time.time()),
+            "client_secret_expires_at": 0,  # Never expires
+            "redirect_uris": registration_data.get("redirect_uris", []),
+            "response_types": ["code"],
+            "grant_types": ["authorization_code"],
+            "token_endpoint_auth_method": "client_secret_post",
+            "scope": auth_settings.mcp_scope,
+        }
+        
+        # Log for debugging
+        logger.info(f"Registered new OAuth client: {client_id}")
+        
+        return JSONResponse(registration_response, status_code=201)
+
+    routes.append(
+        Route(
+            "/register",
+            endpoint=cors_middleware(register_handler, ["POST", "OPTIONS"]),
             methods=["POST", "OPTIONS"],
         )
     )
