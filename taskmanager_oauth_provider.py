@@ -426,8 +426,8 @@ class TaskManagerOAuthProvider(OAuthAuthorizationServerProvider):
 
 # Helper function to create provider instance
 def create_taskmanager_oauth_provider(
-    taskmanager_base_url: str = "http://localhost:4321",
-    server_url: str = "http://localhost:8001",
+    taskmanager_base_url: str = "https://todo.brooksmcmillin.com",
+    server_url: str = "https://mcp.brooksmcmillin.com",
     client_id: Optional[str] = None,
     client_secret: Optional[str] = None,
 ) -> TaskManagerOAuthProvider:

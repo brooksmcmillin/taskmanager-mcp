@@ -3,7 +3,7 @@ import logging
 from typing import Any
 
 import click
-from mcp.server.auth.settings import AuthSettings
+from mcp.server.auth.settings import AuthSettings, ClientRegistrationOptions
 from mcp.server.fastmcp.server import FastMCP
 from pydantic import AnyHttpUrl
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -68,6 +68,7 @@ def create_resource_server(settings: ResourceServerSettings) -> FastMCP:
             issuer_url=settings.auth_server_url,
             required_scopes=[settings.mcp_scope],
             resource_server_url=settings.server_url,
+            client_registration_options=ClientRegistrationOptions(enabled=True)
         ),
     )
 
@@ -110,9 +111,9 @@ def main(port: int, auth_server: str, server_url: str, oauth_strict: bool) -> in
         auth_server_url = AnyHttpUrl(auth_server)
 
         # Create settings
-        host = "localhost"
+        host = "0.0.0.0"
         if server_url is None:
-            server_url = f"https://localhost:{port}"
+            server_url = f"https://{host}:{port}"
         settings = ResourceServerSettings(
             host=host,
             port=port,
