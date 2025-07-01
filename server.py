@@ -78,12 +78,13 @@ def create_resource_server(settings: ResourceServerSettings) -> FastMCP:
     @app.custom_route("/.well-known/oauth-authorization-server", methods=["GET"])
     async def oauth_authorization_server_metadata(request: Request):
         """OAuth 2.0 Authorization Server Metadata (RFC 8414)"""
+        auth_base = str(settings.auth_server_url).rstrip('/')
         return JSONResponse({
-            "issuer": str(settings.auth_server_url),
-            "authorization_endpoint": f"{settings.auth_server_url}/oauth/authorize",
-            "token_endpoint": f"{settings.auth_server_url}/oauth/token",
-            "introspection_endpoint": f"{settings.auth_server_url}/introspect",
-            "registration_endpoint": f"{settings.auth_server_url}/register",
+            "issuer": auth_base,
+            "authorization_endpoint": f"{auth_base}/oauth/authorize",
+            "token_endpoint": f"{auth_base}/oauth/token",
+            "introspection_endpoint": f"{auth_base}/introspect",
+            "registration_endpoint": f"{auth_base}/register",
             "scopes_supported": [settings.mcp_scope],
             "response_types_supported": ["code"],
             "grant_types_supported": ["authorization_code"],
@@ -104,12 +105,13 @@ def create_resource_server(settings: ResourceServerSettings) -> FastMCP:
     @app.custom_route("/.well-known/oauth-authorization-server/mcp", methods=["GET"])
     async def oauth_authorization_server_metadata_for_mcp(request: Request):
         """Resource-specific OAuth 2.0 Authorization Server Metadata for /mcp resource"""
+        auth_base = str(settings.auth_server_url).rstrip('/')
         return JSONResponse({
-            "issuer": str(settings.auth_server_url),
-            "authorization_endpoint": f"{settings.auth_server_url}/oauth/authorize",
-            "token_endpoint": f"{settings.auth_server_url}/oauth/token",
-            "introspection_endpoint": f"{settings.auth_server_url}/introspect",
-            "registration_endpoint": f"{settings.auth_server_url}/register",
+            "issuer": auth_base,
+            "authorization_endpoint": f"{auth_base}/oauth/authorize",
+            "token_endpoint": f"{auth_base}/oauth/token",
+            "introspection_endpoint": f"{auth_base}/introspect",
+            "registration_endpoint": f"{auth_base}/register",
             "scopes_supported": [settings.mcp_scope],
             "response_types_supported": ["code"],
             "grant_types_supported": ["authorization_code"],
