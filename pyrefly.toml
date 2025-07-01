@@ -1,0 +1,6 @@
+project-includes = ["**/*"]
+project-excludes = ["**/*venv/**/*"]
+
+ignore-missing-source = false
+
+

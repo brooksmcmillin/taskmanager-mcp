@@ -1,6 +1,7 @@
 """Example token verifier implementation using OAuth 2.0 Token Introspection (RFC 7662)."""
 
 import logging
+from typing import Any
 
 from mcp.server.auth.provider import AccessToken, TokenVerifier
 from mcp.shared.auth_utils import check_resource_allowed, resource_url_from_server_url
@@ -34,26 +35,25 @@ class IntrospectionTokenVerifier(TokenVerifier):
         """Verify token via introspection endpoint."""
         import httpx
 
-        print("Verifying token")
-
         # Validate URL to prevent SSRF attacks
-        if not self.introspection_endpoint.startswith(("https://", "http://localhost", "http://127.0.0.1")):
-            logger.warning(f"Rejecting introspection endpoint with unsafe scheme: {self.introspection_endpoint}")
+        if not self.introspection_endpoint.startswith(
+            ("https://", "http://localhost", "http://127.0.0.1")
+        ):
+            logger.warning(
+                f"Rejecting introspection endpoint with unsafe scheme: {self.introspection_endpoint}"
+            )
             return None
 
         # Configure secure HTTP client
         timeout = httpx.Timeout(10.0, connect=5.0)
         limits = httpx.Limits(max_connections=10, max_keepalive_connections=5)
 
-
-        print("Made a client")
         async with httpx.AsyncClient(
             timeout=timeout,
             limits=limits,
             verify=True,  # Enforce SSL verification
         ) as client:
             try:
-
                 print(f"Connectiong to {self.introspection_endpoint}")
                 response = await client.post(
                     self.introspection_endpoint,
@@ -62,18 +62,22 @@ class IntrospectionTokenVerifier(TokenVerifier):
                 )
 
                 if response.status_code != 200:
-                    logger.debug(f"Token introspection returned status {response.status_code}")
+                    logger.debug(
+                        f"Token introspection returned status {response.status_code}"
+                    )
                     return None
 
                 data = response.json()
                 print(f"DEBUG: Introspection response: {data}")
                 if not data.get("active", False):
-                    print(f"DEBUG: Token marked as inactive")
+                    print("DEBUG: Token marked as inactive")
                     return None
 
                 # RFC 8707 resource validation (only when --oauth-strict is set)
                 if self.validate_resource and not self._validate_resource(data):
-                    logger.warning(f"Token resource validation failed. Expected: {self.resource_url}")
+                    logger.warning(
+                        f"Token resource validation failed. Expected: {self.resource_url}"
+                    )
                     return None
 
                 access_token = AccessToken(
@@ -89,7 +93,7 @@ class IntrospectionTokenVerifier(TokenVerifier):
                 logger.warning(f"Token introspection failed: {e}")
                 return None
 
-    def _validate_resource(self, token_data: dict) -> bool:
+    def _validate_resource(self, token_data: dict[str, Any]) -> bool:
         """Validate token was issued for this resource server."""
         print("Validating Resource")
         if not self.server_url or not self.resource_url:
@@ -114,4 +118,6 @@ class IntrospectionTokenVerifier(TokenVerifier):
         if not self.resource_url:
             return False
 
-        return check_resource_allowed(requested_resource=self.resource_url, configured_resource=resource)
+        return check_resource_allowed(
+            requested_resource=self.resource_url, configured_resource=resource
+        )

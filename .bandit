@@ -1,0 +1,5 @@
+[bandit]
+exclude_dirs = .venv,tests,.git
+skips = B101
+confidence_level = medium
+severity_level = medium
