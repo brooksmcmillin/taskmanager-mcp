@@ -89,6 +89,7 @@ def create_resource_server(settings: ResourceServerSettings) -> FastMCP:
             "response_types_supported": ["code"],
             "grant_types_supported": ["authorization_code"],
             "token_endpoint_auth_methods_supported": ["client_secret_post"],
+            "code_challenge_methods_supported": ["S256"],
         })
     
     @app.custom_route("/mcp/.well-known/oauth-protected-resource", methods=["GET"])
@@ -116,6 +117,7 @@ def create_resource_server(settings: ResourceServerSettings) -> FastMCP:
             "response_types_supported": ["code"],
             "grant_types_supported": ["authorization_code"],
             "token_endpoint_auth_methods_supported": ["client_secret_post"],
+            "code_challenge_methods_supported": ["S256"],
             "resource": str(settings.server_url),  # Resource-specific binding
         })
 
