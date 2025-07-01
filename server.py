@@ -18,13 +18,14 @@ class ResourceServerSettings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="MCP_RESOURCE_")
 
     # Server settings
-    host: str = "localhost"
-    port: int = 8001
-    server_url: AnyHttpUrl = AnyHttpUrl("http://localhost:8001")
+    server_url: AnyHttpUrl = AnyHttpUrl("https://mcp.brooksmcmillin.com")
+
+    host: str = "https://mcp.brooksmcmillin.com"
+    port: int = 443
 
     # Authorization Server settings
-    auth_server_url: AnyHttpUrl = AnyHttpUrl("http://localhost:9000")
-    auth_server_introspection_endpoint: str = "http://localhost:9000/introspect"
+    auth_server_url: AnyHttpUrl = AnyHttpUrl("https://mcp-auth.brooksmcmillin.com")
+    auth_server_introspection_endpoint: str = "https://mcp-auth.brooksmcmillin.com/introspect"
     # No user endpoint needed - we get user data from token introspection
 
     # MCP settings
@@ -93,7 +94,7 @@ def create_resource_server(settings: ResourceServerSettings) -> FastMCP:
 
 @click.command()
 @click.option("--port", default=8001, help="Port to listen on")
-@click.option("--auth-server", default="http://localhost:9000", help="Authorization Server URL")
+@click.option("--auth-server", default="https://mcp-auth.brooksmcmillin.com", help="Authorization Server URL")
 @click.option(
     "--oauth-strict",
     is_flag=True,
@@ -109,7 +110,8 @@ def main(port: int, auth_server: str, oauth_strict: bool) -> int:
 
         # Create settings
         host = "localhost"
-        server_url = f"http://{host}:{port}"
+        port = 8001
+        server_url = f"https://{host}:{port}"
         settings = ResourceServerSettings(
             host=host,
             port=port,
