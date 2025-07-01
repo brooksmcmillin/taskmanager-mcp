@@ -71,11 +71,12 @@ def create_resource_server(settings: ResourceServerSettings) -> FastMCP:
         ),
     )
 
-    # Add OAuth discovery endpoints
+    # Add OAuth discovery endpoints using FastMCP's route decorator
     from starlette.responses import JSONResponse
+    from starlette.requests import Request
     
-    @app.get("/.well-known/oauth-authorization-server")
-    async def oauth_authorization_server_metadata():
+    @app.route("/.well-known/oauth-authorization-server", methods=["GET"])
+    async def oauth_authorization_server_metadata(request: Request):
         """OAuth 2.0 Authorization Server Metadata (RFC 8414)"""
         return JSONResponse({
             "issuer": str(settings.auth_server_url),
@@ -88,8 +89,8 @@ def create_resource_server(settings: ResourceServerSettings) -> FastMCP:
             "token_endpoint_auth_methods_supported": ["client_secret_post"],
         })
     
-    @app.get("/mcp/.well-known/oauth-protected-resource")
-    async def oauth_protected_resource_metadata():
+    @app.route("/mcp/.well-known/oauth-protected-resource", methods=["GET"])
+    async def oauth_protected_resource_metadata(request: Request):
         """OAuth 2.0 Protected Resource Metadata (RFC 9908)"""
         return JSONResponse({
             "resource": str(settings.server_url),
