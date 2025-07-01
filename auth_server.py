@@ -112,8 +112,6 @@ def create_authorization_server(server_settings: AuthServerSettings, auth_settin
 
     routes.append(Route("/callback", endpoint=mcp_client_callback_handler, methods=["GET"]))
 
-
-
     # Add token introspection endpoint (RFC 7662) for Resource Servers
     async def introspect_handler(request: Request) -> Response:
         """
