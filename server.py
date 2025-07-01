@@ -95,12 +95,13 @@ def create_resource_server(settings: ResourceServerSettings) -> FastMCP:
 @click.command()
 @click.option("--port", default=8001, help="Port to listen on")
 @click.option("--auth-server", default="https://mcp-auth.brooksmcmillin.com", help="Authorization Server URL")
+@click.option("--server-url", help="External server URL (for OAuth). Defaults to https://localhost:PORT")
 @click.option(
     "--oauth-strict",
     is_flag=True,
     help="Enable RFC 8707 resource validation",
 )
-def main(port: int, auth_server: str, oauth_strict: bool) -> int:
+def main(port: int, auth_server: str, server_url: str, oauth_strict: bool) -> int:
 
     logging.basicConfig(level=logging.INFO)
 
@@ -110,8 +111,8 @@ def main(port: int, auth_server: str, oauth_strict: bool) -> int:
 
         # Create settings
         host = "localhost"
-        port = 8001
-        server_url = f"https://{host}:{port}"
+        if server_url is None:
+            server_url = f"https://localhost:{port}"
         settings = ResourceServerSettings(
             host=host,
             port=port,
