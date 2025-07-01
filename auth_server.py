@@ -1,4 +1,5 @@
 import asyncio
+import json
 import logging
 import os
 import time
@@ -149,9 +150,17 @@ def create_authorization_server(server_settings: AuthServerSettings, auth_settin
         Allows Claude Code to register itself as an OAuth client.
         """
         try:
-            registration_data = await request.json()
-        except Exception:
-            return JSONResponse({"error": "invalid_request"}, status_code=400)
+            # Log the raw request for debugging
+            body = await request.body()
+            logger.info(f"Registration request body: {body}")
+            logger.info(f"Registration request headers: {dict(request.headers)}")
+            
+            # Try to parse as JSON
+            registration_data = json.loads(body) if body else {}
+            logger.info(f"Parsed registration data: {registration_data}")
+        except Exception as e:
+            logger.error(f"Failed to parse registration request: {e}")
+            return JSONResponse({"error": "invalid_request", "error_description": "Invalid JSON"}, status_code=400)
         
         # Generate client credentials
         import secrets

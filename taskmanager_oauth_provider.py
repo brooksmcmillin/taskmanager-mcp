@@ -111,7 +111,12 @@ class TaskManagerOAuthProvider(OAuthAuthorizationServerProvider):
     async def _get_session(self) -> aiohttp.ClientSession:
         """Get or create HTTP session for taskmanager API calls."""
         if self._session is None:
-            self._session = aiohttp.ClientSession()
+            # Create session with headers that bypass CSRF for API calls
+            headers = {
+                "X-Requested-With": "XMLHttpRequest",  # Often bypasses CSRF
+                "Accept": "application/json",
+            }
+            self._session = aiohttp.ClientSession(headers=headers)
         return self._session
 
     async def close(self):
