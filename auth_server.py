@@ -76,6 +76,42 @@ def create_authorization_server(server_settings: AuthServerSettings, auth_settin
 
     routes.append(Route("/oauth/callback", endpoint=oauth_callback_handler, methods=["GET"]))
 
+    # Add MCP client callback route
+    async def mcp_client_callback_handler(request: Request) -> Response:
+        """Handle callback from MCP client OAuth flow."""
+        from starlette.responses import HTMLResponse
+        
+        # Extract auth code and state from query params
+        code = request.query_params.get("code")
+        state = request.query_params.get("state")
+        error = request.query_params.get("error")
+        
+        if error:
+            return HTMLResponse(f"""
+            <html>
+            <body>
+                <h1>Authorization Failed</h1>
+                <p>Error: {error}</p>
+                <p>You can close this window and return to the terminal.</p>
+            </body>
+            </html>
+            """, status_code=400)
+        
+        if code:
+            return HTMLResponse("""
+            <html>
+            <body>
+                <h1>Authorization Successful!</h1>
+                <p>You can close this window and return to the terminal.</p>
+                <script>setTimeout(() => window.close(), 2000);</script>
+            </body>
+            </html>
+            """)
+        
+        return HTMLResponse("Invalid callback", status_code=400)
+
+    routes.append(Route("/callback", endpoint=mcp_client_callback_handler, methods=["GET"]))
+
     # Add token introspection endpoint (RFC 7662) for Resource Servers
     async def introspect_handler(request: Request) -> Response:
         """
