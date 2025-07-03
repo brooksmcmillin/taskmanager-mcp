@@ -106,17 +106,20 @@ def load_registered_clients():
                 else:
                     scope_string = scopes
                 
+                # Determine auth method - Claude uses "none", others use "client_secret_post"
+                auth_method = "none" if client_id == "claude-code-a6386c3617660a19" else "client_secret_post"
+                
                 processed_client = {
                     "client_id": client_id,
                     "client_secret": client_data.get('client_secret') or client_data.get('clientSecret', 'dummy-secret'),
                     "redirect_uris": redirect_uris,
                     "response_types": response_types,
                     "grant_types": grant_types,
-                    "token_endpoint_auth_method": client_data.get('token_endpoint_auth_method') or "client_secret_post",
+                    "token_endpoint_auth_method": auth_method,
                     "scope": scope_string,
                     "created_at": client_data.get('created_at') or int(time.time())
                 }
-                logger.info(f"Processed client {client_id} with scope: '{scope_string}'")
+                logger.info(f"Processed client {client_id} with scope: '{scope_string}', auth_method: '{auth_method}'")
                 clients[client_id] = processed_client
     
     return clients
