@@ -331,7 +331,7 @@ def main(port: int, taskmanager_url: str, server_url: str = None) -> int:
     # Initialize API client for backend database operations
     global api_client
     from task_api import create_authenticated_client
-    api_client = create_authenticated_client(client_id, client_secret, f"http://{taskmanager_url}/api")
+    api_client = create_authenticated_client(client_id, client_secret, f"{taskmanager_url}/api")
     
     if not api_client:
         logger.error("Failed to authenticate with backend API")
