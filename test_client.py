@@ -7,18 +7,12 @@ This client connects to an MCP server using streamable HTTP transport with OAuth
 """
 
 import asyncio
-import os
-import threading
-import time
 import webbrowser
 from datetime import timedelta
-from http.server import BaseHTTPRequestHandler, HTTPServer
 from typing import Any
-from urllib.parse import parse_qs, urlparse
 
 from mcp.client.auth import OAuthClientProvider, TokenStorage
 from mcp.client.session import ClientSession
-from mcp.client.sse import sse_client
 from mcp.client.streamable_http import streamablehttp_client
 from mcp.shared.auth import OAuthClientInformationFull, OAuthClientMetadata, OAuthToken
 
@@ -42,111 +36,6 @@ class InMemoryTokenStorage(TokenStorage):
     async def set_client_info(self, client_info: OAuthClientInformationFull) -> None:
         self._client_info = client_info
 
-
-class CallbackHandler(BaseHTTPRequestHandler):
-    """Simple HTTP handler to capture OAuth callback."""
-
-    def __init__(self, request, client_address, server, callback_data):
-        """Initialize with callback data storage."""
-        self.callback_data = callback_data
-        super().__init__(request, client_address, server)
-
-    def do_GET(self):
-        """Handle GET request from OAuth redirect."""
-        parsed = urlparse(self.path)
-        query_params = parse_qs(parsed.query)
-
-        if "code" in query_params:
-            self.callback_data["authorization_code"] = query_params["code"][0]
-            self.callback_data["state"] = query_params.get("state", [None])[0]
-            self.send_response(200)
-            self.send_header("Content-type", "text/html")
-            self.end_headers()
-            self.wfile.write(b"""
-            <html>
-            <body>
-                <h1>Authorization Successful!</h1>
-                <p>You can close this window and return to the terminal.</p>
-                <script>setTimeout(() => window.close(), 2000);</script>
-            </body>
-            </html>
-            """)
-        elif "error" in query_params:
-            self.callback_data["error"] = query_params["error"][0]
-            self.send_response(400)
-            self.send_header("Content-type", "text/html")
-            self.end_headers()
-            self.wfile.write(
-                f"""
-            <html>
-            <body>
-                <h1>Authorization Failed</h1>
-                <p>Error: {query_params['error'][0]}</p>
-                <p>You can close this window and return to the terminal.</p>
-            </body>
-            </html>
-            """.encode()
-            )
-        else:
-            self.send_response(404)
-            self.end_headers()
-
-    def log_message(self, format, *args):
-        """Suppress default logging."""
-        pass
-
-
-class CallbackServer:
-    """Simple server to handle OAuth callbacks."""
-
-    def __init__(self, port=3000):
-        self.port = port
-        self.server = None
-        self.thread = None
-        self.callback_data = {"authorization_code": None, "state": None, "error": None}
-
-    def _create_handler_with_data(self):
-        """Create a handler class with access to callback data."""
-        callback_data = self.callback_data
-
-        class DataCallbackHandler(CallbackHandler):
-            def __init__(self, request, client_address, server):
-                super().__init__(request, client_address, server, callback_data)
-
-        return DataCallbackHandler
-
-    def start(self):
-        """Start the callback server in a background thread."""
-        handler_class = self._create_handler_with_data()
-        self.server = HTTPServer(("localhost", self.port), handler_class)
-        self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
-        self.thread.start()
-        print(f"🖥️  Started callback server on http://localhost:{self.port}")
-
-    def stop(self):
-        """Stop the callback server."""
-        if self.server:
-            self.server.shutdown()
-            self.server.server_close()
-        if self.thread:
-            self.thread.join(timeout=1)
-
-    def wait_for_callback(self, timeout=300):
-        """Wait for OAuth callback with timeout."""
-        start_time = time.time()
-        while time.time() - start_time < timeout:
-            if self.callback_data["authorization_code"]:
-                return self.callback_data["authorization_code"]
-            elif self.callback_data["error"]:
-                raise Exception(f"OAuth error: {self.callback_data['error']}")
-            time.sleep(0.1)
-        raise Exception("Timeout waiting for OAuth callback")
-
-    def get_state(self):
-        """Get the received state parameter."""
-        return self.callback_data["state"]
-
-
 class SimpleAuthClient:
     """Simple MCP client with auth support."""
 
@@ -160,21 +49,9 @@ class SimpleAuthClient:
         print(f"🔗 Attempting to connect to {self.server_url}...")
 
         try:
-            callback_server = CallbackServer(port=3030)
-            callback_server.start()
-
-            async def callback_handler() -> tuple[str, str | None]:
-                """Wait for OAuth callback and return auth code and state."""
-                print("⏳ Waiting for authorization callback...")
-                try:
-                    auth_code = callback_server.wait_for_callback(timeout=300)
-                    return auth_code, callback_server.get_state()
-                finally:
-                    callback_server.stop()
-
             client_metadata_dict = {
                 "client_name": "Simple Auth Client",
-                "redirect_uris": ["http://localhost:3030/callback"],
+                "redirect_uris": ["https://mcp-auth.ROOT_DOMAIN/callback"],
                 "grant_types": ["authorization_code", "refresh_token"],
                 "response_types": ["code"],
                 "token_endpoint_auth_method": "client_secret_post",
@@ -187,8 +64,15 @@ class SimpleAuthClient:
 
             # Create OAuth authentication handler for TaskManager integration
             # The server_url should point to the MCP auth server, not the resource server
-            auth_server_url = self.server_url.replace("/mcp", "").replace("8001", "9000")
-            
+            # auth_server_url = self.server_url.replace("/mcp", "").replace("8001", "9000")
+            #print(auth_server_url)
+            auth_server_url = "https://mcp-auth.ROOT_DOMAIN"
+
+            async def callback_handler() -> tuple[str, str | None]:
+                """Wait for OAuth callback and return auth code and state."""
+                print("⏳ Waiting for authorization callback...")
+                print("Done?")
+
             oauth_auth = OAuthClientProvider(
                 server_url=auth_server_url,  # Points to MCP auth server (port 9000)
                 client_metadata=OAuthClientMetadata.model_validate(
@@ -196,26 +80,16 @@ class SimpleAuthClient:
                 ),
                 storage=InMemoryTokenStorage(),
                 redirect_handler=_default_redirect_handler,
-                callback_handler=callback_handler,
+                callback_handler=callback_handler
             )
 
-            # Create transport with auth handler based on transport type
-            if self.transport_type == "sse":
-                print("📡 Opening SSE transport connection with auth...")
-                async with sse_client(
-                    url=self.server_url,
-                    auth=oauth_auth,
-                    timeout=60,
-                ) as (read_stream, write_stream):
-                    await self._run_session(read_stream, write_stream, None)
-            else:
-                print("📡 Opening StreamableHTTP transport connection with auth...")
-                async with streamablehttp_client(
-                    url=self.server_url,
-                    auth=oauth_auth,
-                    timeout=timedelta(seconds=60),
-                ) as (read_stream, write_stream, get_session_id):
-                    await self._run_session(read_stream, write_stream, get_session_id)
+            print("📡 Opening StreamableHTTP transport connection with auth...")
+            async with streamablehttp_client(
+                url=self.server_url,
+                auth=oauth_auth,
+                timeout=timedelta(seconds=60),
+            ) as (read_stream, write_stream, get_session_id):
+                await self._run_session(read_stream, write_stream, get_session_id)
 
         except Exception as e:
             print(f"❌ Failed to connect: {e}")
@@ -337,23 +211,15 @@ class SimpleAuthClient:
 
 
 async def main():
-    """Main entry point."""
-    # Default server URL - can be overridden with environment variable
-    # Most MCP streamable HTTP servers use /mcp as the endpoint
-    server_url = os.getenv("MCP_SERVER_PORT", 8001)
-    transport_type = os.getenv("MCP_TRANSPORT_TYPE", "streamable_http")
     server_url = (
-        f"http://localhost:{server_url}/mcp/"
-        if transport_type == "streamable_http"
-        else f"http://localhost:{server_url}/sse"
+        "https://mcp.ROOT_DOMAIN/mcp/"
     )
 
     print("🚀 Simple MCP Auth Client")
     print(f"Connecting to: {server_url}")
-    print(f"Transport type: {transport_type}")
 
     # Start connection flow - OAuth will be handled automatically
-    client = SimpleAuthClient(server_url, transport_type)
+    client = SimpleAuthClient(server_url, "streamable_http")
     await client.connect()
 
 
