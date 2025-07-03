@@ -206,8 +206,9 @@ class TaskManagerOAuthProvider(OAuthAuthorizationServerProvider):
         }
 
         # Build authorization URL pointing to taskmanager
+        # Use the original client_id (Claude's) for the TaskManager OAuth flow
         auth_params = {
-            "client_id": self.settings.client_id or "mcp-server-default",
+            "client_id": client.client_id,  # Use the actual client ID (claude-code-a6386c3617660a19)
             "redirect_uri": f"{self.server_url.rstrip('/')}/oauth/callback",  # This server handles callback
             "response_type": "code",
             "scope": self.settings.mcp_scope,
@@ -305,11 +306,28 @@ class TaskManagerOAuthProvider(OAuthAuthorizationServerProvider):
         """
         session = await self._get_session()
         
+        # Get the client info from state mapping to use correct credentials
+        state_data = None
+        for state_key, data in self.state_mapping.items():
+            if code in self.auth_codes:
+                auth_code = self.auth_codes[code]
+                if auth_code.client_id == data["client_id"]:
+                    state_data = data
+                    break
+        
+        # Get the client credentials - check if it's a registered client first
+        client_id = state_data["client_id"] if state_data else self.settings.client_id
+        client_secret = "dummy-secret"  # Default for Claude client
+        
+        if hasattr(self, 'registered_clients') and client_id in self.registered_clients:
+            client_info = self.registered_clients[client_id]
+            client_secret = client_info.get("client_secret", "dummy-secret")
+        
         token_data = {
             "grant_type": "authorization_code",
             "code": code,
-            "client_id": self.settings.client_id or "mcp-server-default",
-            "client_secret": self.settings.client_secret or "REPLACE_WITH_CLIENT_SECRET",
+            "client_id": client_id,
+            "client_secret": client_secret,
             "redirect_uri": f"{self.server_url.rstrip('/')}/oauth/callback",
         }
 
