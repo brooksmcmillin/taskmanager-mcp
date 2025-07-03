@@ -62,12 +62,12 @@ def create_authorization_server(server_settings: AuthServerSettings, auth_settin
         resource_server_url=None,
     )
 
-    # Create OAuth routes
+    # Create OAuth routes without built-in registration
     routes = create_auth_routes(
         provider=oauth_provider,
         issuer_url=mcp_auth_settings.issuer_url,
         service_documentation_url=mcp_auth_settings.service_documentation_url,
-        client_registration_options=mcp_auth_settings.client_registration_options,
+        client_registration_options=None,  # Disable built-in registration
         revocation_options=mcp_auth_settings.revocation_options,
     )
 
