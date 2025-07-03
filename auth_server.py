@@ -64,7 +64,9 @@ def load_registered_clients():
     # Convert API response to the format expected by auth server
     clients = {}
     if response.data:
+        logger.info(f"Loaded {len(response.data)} clients from backend database")
         for client_data in response.data:
+            logger.debug(f"Processing client data: {client_data}")
             client_id = client_data.get('client_id') or client_data.get('clientId')
             if client_id:
                 # Parse JSON strings back to lists if needed
@@ -89,16 +91,33 @@ def load_registered_clients():
                     except json.JSONDecodeError:
                         response_types = ["code"]
                 
-                clients[client_id] = {
+                # Handle scopes - could be a string, list, or JSON string
+                scopes = client_data.get('scope') or client_data.get('scopes', "read")
+                if isinstance(scopes, list):
+                    # If it's a list, join with spaces (OAuth standard)
+                    scope_string = " ".join(scopes)
+                elif isinstance(scopes, str) and scopes.startswith('['):
+                    # If it's a JSON string array, parse it
+                    try:
+                        parsed_scopes = json.loads(scopes)
+                        scope_string = " ".join(parsed_scopes) if isinstance(parsed_scopes, list) else scopes
+                    except json.JSONDecodeError:
+                        scope_string = scopes
+                else:
+                    scope_string = scopes
+                
+                processed_client = {
                     "client_id": client_id,
                     "client_secret": client_data.get('client_secret') or client_data.get('clientSecret', 'dummy-secret'),
                     "redirect_uris": redirect_uris,
                     "response_types": response_types,
                     "grant_types": grant_types,
                     "token_endpoint_auth_method": client_data.get('token_endpoint_auth_method') or "client_secret_post",
-                    "scope": client_data.get('scope') or client_data.get('scopes', "read"),
+                    "scope": scope_string,
                     "created_at": client_data.get('created_at') or int(time.time())
                 }
+                logger.info(f"Processed client {client_id} with scope: '{scope_string}'")
+                clients[client_id] = processed_client
     
     return clients
 
