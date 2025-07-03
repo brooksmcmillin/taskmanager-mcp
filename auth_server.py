@@ -152,13 +152,17 @@ def create_authorization_server(server_settings: AuthServerSettings, auth_settin
         try:
             # Log the raw request for debugging
             body = await request.body()
-            logger.info(f"Registration request body: {body}")
-            logger.info(f"Registration request headers: {dict(request.headers)}")
+            print(f"[DEBUG] Registration request body: {body}")
+            print(f"[DEBUG] Registration request headers: {dict(request.headers)}")
+            logger.warning(f"Registration request body: {body}")
+            logger.warning(f"Registration request headers: {dict(request.headers)}")
             
             # Try to parse as JSON
             registration_data = json.loads(body) if body else {}
-            logger.info(f"Parsed registration data: {registration_data}")
+            print(f"[DEBUG] Parsed registration data: {registration_data}")
+            logger.warning(f"Parsed registration data: {registration_data}")
         except Exception as e:
+            print(f"[DEBUG] Failed to parse registration request: {e}")
             logger.error(f"Failed to parse registration request: {e}")
             return JSONResponse({"error": "invalid_request", "error_description": "Invalid JSON"}, status_code=400)
         
@@ -170,13 +174,19 @@ def create_authorization_server(server_settings: AuthServerSettings, auth_settin
         # Store client (in production, save to database)
         # For now, we'll just return the registration response
         
+        # Set default redirect URIs if not provided
+        redirect_uris = registration_data.get("redirect_uris", [
+            "http://localhost:3000/callback",  # Common local development
+            "https://claude.ai/callback",      # Claude Web callback
+        ])
+        
         # RFC 7591 client registration response
         registration_response = {
             "client_id": client_id,
             "client_secret": client_secret,
             "client_id_issued_at": int(time.time()),
             "client_secret_expires_at": 0,  # Never expires
-            "redirect_uris": registration_data.get("redirect_uris", []),
+            "redirect_uris": redirect_uris,
             "response_types": ["code"],
             "grant_types": ["authorization_code"],
             "token_endpoint_auth_method": "client_secret_post",
