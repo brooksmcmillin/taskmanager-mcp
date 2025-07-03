@@ -136,10 +136,17 @@ class TaskManagerOAuthProvider(OAuthAuthorizationServerProvider):
         logger.info(f"Looking for client: {client_id}")
         logger.info(f"Local cache clients: {list(self.clients.keys())}")
         
+        # Force reload for Claude client to pick up auth method changes
+        if client_id == "claude-code-a6386c3617660a19" and client_id in self.clients:
+            logger.info(f"Clearing cache for Claude client to force reload")
+            del self.clients[client_id]
+        
         # Check local cache first
         if client_id in self.clients:
+            cached_client = self.clients[client_id]
             logger.info(f"Found client {client_id} in local cache")
-            return self.clients[client_id]
+            logger.info(f"Cached client auth method: {cached_client.token_endpoint_auth_method}")
+            return cached_client
             
         # Check registered clients from auth server
         if hasattr(self, 'registered_clients'):
