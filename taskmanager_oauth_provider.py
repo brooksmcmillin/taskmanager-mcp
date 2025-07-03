@@ -156,9 +156,15 @@ class TaskManagerOAuthProvider(OAuthAuthorizationServerProvider):
                 logger.info(f"Found client {client_id} in registered clients: {client_data}")
                 
                 # Convert to OAuthClientInformationFull format
+                logger.info(f"Creating OAuthClientInformationFull with auth_method: {client_data['token_endpoint_auth_method']}")
+                
+                # For "none" auth method, don't provide client_secret
+                client_secret = None if client_data["token_endpoint_auth_method"] == "none" else client_data["client_secret"]
+                logger.info(f"Using client_secret: {client_secret} for auth method: {client_data['token_endpoint_auth_method']}")
+                
                 client_info = OAuthClientInformationFull(
                     client_id=client_data["client_id"],
-                    client_secret=client_data["client_secret"],
+                    client_secret=client_secret,
                     redirect_uris=client_data["redirect_uris"],
                     response_types=client_data["response_types"],
                     grant_types=client_data["grant_types"],
@@ -168,6 +174,7 @@ class TaskManagerOAuthProvider(OAuthAuthorizationServerProvider):
                 # Cache it locally for future use
                 self.clients[client_id] = client_info
                 logger.info(f"Successfully converted and cached client {client_id}")
+                logger.info(f"Final client auth method: {client_info.token_endpoint_auth_method}")
                 return client_info
         else:
             logger.warning("No registered_clients attribute found on provider")
