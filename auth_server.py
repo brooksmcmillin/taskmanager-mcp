@@ -17,6 +17,7 @@ from starlette.routing import Route
 from uvicorn import Config, Server
 
 from taskmanager_oauth_provider import TaskManagerAuthSettings, TaskManagerOAuthProvider
+from task_api import TaskManagerAPI
 
 load_dotenv()
 logger = logging.getLogger(__name__)
@@ -46,43 +47,47 @@ class TaskManagerAuthProvider(TaskManagerOAuthProvider):
         super().__init__(auth_settings, server_url)
 
 
-# File to persist registered clients
-CLIENTS_FILE = Path("registered_clients.json")
+# API client for backend database operations
+api_client = None
 
 def load_registered_clients():
-    """Load registered clients from file."""
-    if CLIENTS_FILE.exists():
-        try:
-            with open(CLIENTS_FILE, 'r') as f:
-                return json.load(f)
-        except Exception as e:
-            logging.warning(f"Could not load clients file: {e}")
+    """Load registered clients from backend database."""
+    global api_client
+    if not api_client:
+        return {}
     
-    # Default pre-registered clients
-    return {
-        # Pre-register Claude Web's cached client ID
-        "claude-code-a6386c3617660a19": {
-            "client_id": "claude-code-a6386c3617660a19",
-            "client_secret": "dummy-secret",  # Claude Web uses "none" auth method
-            "redirect_uris": ["https://claude.ai/api/mcp/auth_callback"],
-            "response_types": ["code"],
-            "grant_types": ["authorization_code", "refresh_token"],
-            "token_endpoint_auth_method": "none",  # Claude Web uses no client authentication
-            "scope": "read",
-            "created_at": 1751347844
-        }
-    }
+    response = api_client.get_oauth_clients()
+    if not response.success:
+        logging.warning(f"Could not load clients from backend: {response.error}")
+        return {}
+    
+    # Convert API response to the format expected by auth server
+    clients = {}
+    if response.data:
+        for client_data in response.data:
+            client_id = client_data.get('client_id') or client_data.get('clientId')
+            if client_id:
+                clients[client_id] = {
+                    "client_id": client_id,
+                    "client_secret": client_data.get('client_secret') or client_data.get('clientSecret', 'dummy-secret'),
+                    "redirect_uris": client_data.get('redirect_uris') or client_data.get('redirectUris', []),
+                    "response_types": client_data.get('response_types') or ["code"],
+                    "grant_types": client_data.get('grant_types') or client_data.get('grantTypes', ["authorization_code", "refresh_token"]),
+                    "token_endpoint_auth_method": client_data.get('token_endpoint_auth_method') or "client_secret_post",
+                    "scope": client_data.get('scope') or client_data.get('scopes', "read"),
+                    "created_at": client_data.get('created_at') or int(time.time())
+                }
+    
+    return clients
 
 def save_registered_clients(clients):
-    """Save registered clients to file."""
-    try:
-        with open(CLIENTS_FILE, 'w') as f:
-            json.dump(clients, f, indent=2)
-    except Exception as e:
-        logging.warning(f"Could not save clients file: {e}")
+    """Save registered clients to backend database."""
+    # This function is now handled by create_oauth_client calls
+    # Individual client creation is done via the API in the register handler
+    pass
 
 # Load persisted client storage
-registered_clients = load_registered_clients()
+registered_clients = {}
 
 def create_authorization_server(server_settings: AuthServerSettings, auth_settings: TaskManagerAuthSettings) -> Starlette:
     """Create the Authorization Server application."""
@@ -90,7 +95,9 @@ def create_authorization_server(server_settings: AuthServerSettings, auth_settin
         auth_settings, str(server_settings.server_url)
     )
     
-    # Share registered clients with OAuth provider
+    # Load and share registered clients with OAuth provider
+    global registered_clients
+    registered_clients = load_registered_clients()
     oauth_provider.registered_clients = registered_clients
 
     mcp_auth_settings = AuthSettings(
@@ -208,32 +215,54 @@ def create_authorization_server(server_settings: AuthServerSettings, auth_settin
             logger.error(f"Failed to parse registration request: {e}")
             return JSONResponse({"error": "invalid_request", "error_description": "Invalid JSON"}, status_code=400)
         
-        # Generate client credentials
-        import secrets
-        client_id = f"claude-code-{secrets.token_hex(8)}"
-        client_secret = secrets.token_hex(32)
-        
-        # Store client credentials in memory (use database in production)
-        client_info = {
-            "client_id": client_id,
-            "client_secret": client_secret,
-            "redirect_uris": redirect_uris,
-            "response_types": ["code"],
-            "grant_types": ["authorization_code"],
-            "token_endpoint_auth_method": "client_secret_post",
-            "scope": auth_settings.mcp_scope,
-            "created_at": int(time.time())
-        }
-        registered_clients[client_id] = client_info
-        
-        # Persist to file
-        save_registered_clients(registered_clients)
-        
         # Set default redirect URIs if not provided
         redirect_uris = registration_data.get("redirect_uris", [
             "http://localhost:3000/callback",  # Common local development
             "https://claude.ai/callback",      # Claude Web callback
         ])
+        
+        # Create OAuth client via backend API
+        global api_client
+        if not api_client:
+            return JSONResponse({"error": "server_error", "error_description": "Backend API not available"}, status_code=500)
+        
+        # Generate client name
+        import secrets
+        client_name = f"claude-code-{secrets.token_hex(4)}"
+        
+        # Create client in backend database
+        api_response = api_client.create_oauth_client(
+            name=client_name,
+            redirect_uris=redirect_uris,
+            grant_types=["authorization_code", "refresh_token"],
+            scopes=[auth_settings.mcp_scope]
+        )
+        
+        if not api_response.success:
+            logger.error(f"Failed to create OAuth client: {api_response.error}")
+            return JSONResponse({"error": "server_error", "error_description": f"Failed to create client: {api_response.error}"}, status_code=500)
+        
+        # Extract client credentials from API response
+        client_data = api_response.data
+        client_id = client_data.get('client_id') or client_data.get('clientId')
+        client_secret = client_data.get('client_secret') or client_data.get('clientSecret')
+        
+        if not client_id or not client_secret:
+            logger.error(f"Invalid client data returned from API: {client_data}")
+            return JSONResponse({"error": "server_error", "error_description": "Invalid client data from backend"}, status_code=500)
+        
+        # Store in local cache for immediate use
+        client_info = {
+            "client_id": client_id,
+            "client_secret": client_secret,
+            "redirect_uris": redirect_uris,
+            "response_types": ["code"],
+            "grant_types": ["authorization_code", "refresh_token"],
+            "token_endpoint_auth_method": "client_secret_post",
+            "scope": auth_settings.mcp_scope,
+            "created_at": int(time.time())
+        }
+        registered_clients[client_id] = client_info
         
         # RFC 7591 client registration response
         registration_response = {
@@ -298,7 +327,15 @@ def main(port: int, taskmanager_url: str, server_url: str = None) -> int:
 
     client_id = os.environ["TASKMANAGER_CLIENT_ID"]
     client_secret = os.environ["TASKMANAGER_CLIENT_SECRET"]
-
+    
+    # Initialize API client for backend database operations
+    global api_client
+    from task_api import create_authenticated_client
+    api_client = create_authenticated_client(client_id, client_secret, f"http://{taskmanager_url}/api")
+    
+    if not api_client:
+        logger.error("Failed to authenticate with backend API")
+        return 1
    
     print(f"Taskmanager URL: {taskmanager_url}")
     # Load TaskManager auth settings
