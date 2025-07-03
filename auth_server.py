@@ -218,6 +218,14 @@ def create_authorization_server(server_settings: AuthServerSettings, auth_settin
                     
                     logger.info(f"Token endpoint result: {response_data['status']}")
                     
+                    # Log response body for debugging
+                    if response_data["body"]:
+                        try:
+                            response_text = response_data["body"].decode('utf-8')
+                            logger.info(f"Token endpoint response body: {response_text}")
+                        except:
+                            logger.info(f"Token endpoint response body (raw): {response_data['body']}")
+                    
                     # Convert headers back to dict format for Response
                     headers_dict = {}
                     for name, value in response_data["headers"]:
