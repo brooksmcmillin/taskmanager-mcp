@@ -160,6 +160,58 @@ def create_authorization_server(server_settings: AuthServerSettings, auth_settin
         client_registration_options=None,  # Disable built-in registration
         revocation_options=mcp_auth_settings.revocation_options,
     )
+    
+    # Add debug wrapper for token endpoint
+    original_token_route = None
+    for i, route in enumerate(routes):
+        if route.path == "/token" and "POST" in route.methods:
+            original_token_route = route
+            # Create debug wrapper
+            async def debug_token_handler(request: Request) -> Response:
+                logger.info(f"=== TOKEN ENDPOINT DEBUG ===")
+                logger.info(f"Method: {request.method}")
+                logger.info(f"URL: {request.url}")
+                logger.info(f"Headers: {dict(request.headers)}")
+                
+                try:
+                    # Read the raw body
+                    body = await request.body()
+                    logger.info(f"Raw body: {body}")
+                    
+                    # Try to parse form data
+                    if request.headers.get("content-type", "").startswith("application/x-www-form-urlencoded"):
+                        # Reconstruct request with body
+                        from starlette.requests import Request as StarletteRequest
+                        scope = request.scope.copy()
+                        
+                        async def receive():
+                            return {"type": "http.request", "body": body}
+                        
+                        new_request = StarletteRequest(scope, receive)
+                        form_data = await new_request.form()
+                        logger.info(f"Form data: {dict(form_data)}")
+                    
+                    # Call original handler
+                    # Create a new request with fresh body stream
+                    from starlette.requests import Request as StarletteRequest
+                    scope = request.scope.copy()
+                    
+                    async def receive():
+                        return {"type": "http.request", "body": body, "more_body": False}
+                    
+                    fresh_request = StarletteRequest(scope, receive)
+                    result = await original_token_route.endpoint(fresh_request)
+                    logger.info(f"Token endpoint result: {result.status_code}")
+                    return result
+                    
+                except Exception as e:
+                    logger.error(f"Token endpoint error: {e}")
+                    logger.error(f"Traceback: ", exc_info=True)
+                    return JSONResponse({"error": "server_error", "error_description": str(e)}, status_code=500)
+            
+            # Replace the route with debug wrapper
+            routes[i] = Route(route.path, debug_token_handler, methods=route.methods)
+            break
 
     # Add OAuth callback route (GET) - receives callback from TaskManager
     async def oauth_callback_handler(request: Request) -> Response:
@@ -364,7 +416,7 @@ def main(port: int, taskmanager_url: str, server_url: str = None) -> int:
     This server handles OAuth flows by delegating authentication to your
     existing TaskManager OAuth endpoints.
     """
-    logging.basicConfig(level=logging.INFO)
+    logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
     client_id = os.environ["TASKMANAGER_CLIENT_ID"]
     client_secret = os.environ["TASKMANAGER_CLIENT_SECRET"]
