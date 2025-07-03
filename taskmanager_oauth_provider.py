@@ -136,9 +136,27 @@ class TaskManagerOAuthProvider(OAuthAuthorizationServerProvider):
         if client_id in self.clients:
             return self.clients[client_id]
             
+        # Check registered clients from auth server
+        if hasattr(self, 'registered_clients') and client_id in self.registered_clients:
+            client_data = self.registered_clients[client_id]
+            # Convert to OAuthClientInformationFull format
+            client_info = OAuthClientInformationFull(
+                client_id=client_data["client_id"],
+                client_secret=client_data["client_secret"],
+                redirect_uris=client_data["redirect_uris"],
+                response_types=client_data["response_types"],
+                grant_types=client_data["grant_types"],
+                token_endpoint_auth_method=client_data["token_endpoint_auth_method"],
+                scope=client_data["scope"]
+            )
+            # Cache it locally for future use
+            self.clients[client_id] = client_info
+            logger.info(f"Found client {client_id} in registered clients")
+            return client_info
+            
         # TODO: Add endpoint to taskmanager to retrieve client info by ID
-        # For now, return None if not in cache
-        logger.warning(f"Client {client_id} not found in local cache")
+        # For now, return None if not found locally
+        logger.warning(f"Client {client_id} not found in local cache or registered clients")
         return None
 
     async def register_client(self, client_info: OAuthClientInformationFull):

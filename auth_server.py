@@ -45,11 +45,17 @@ class TaskManagerAuthProvider(TaskManagerOAuthProvider):
         super().__init__(auth_settings, server_url)
 
 
+# In-memory client storage (for development - use database in production)
+registered_clients = {}
+
 def create_authorization_server(server_settings: AuthServerSettings, auth_settings: TaskManagerAuthSettings) -> Starlette:
     """Create the Authorization Server application."""
     oauth_provider = TaskManagerAuthProvider(
         auth_settings, str(server_settings.server_url)
     )
+    
+    # Share registered clients with OAuth provider
+    oauth_provider.registered_clients = registered_clients
 
     mcp_auth_settings = AuthSettings(
         issuer_url=server_settings.server_url,
@@ -171,8 +177,18 @@ def create_authorization_server(server_settings: AuthServerSettings, auth_settin
         client_id = f"claude-code-{secrets.token_hex(8)}"
         client_secret = secrets.token_hex(32)
         
-        # Store client (in production, save to database)
-        # For now, we'll just return the registration response
+        # Store client credentials in memory (use database in production)
+        client_info = {
+            "client_id": client_id,
+            "client_secret": client_secret,
+            "redirect_uris": redirect_uris,
+            "response_types": ["code"],
+            "grant_types": ["authorization_code"],
+            "token_endpoint_auth_method": "client_secret_post",
+            "scope": auth_settings.mcp_scope,
+            "created_at": int(time.time())
+        }
+        registered_clients[client_id] = client_info
         
         # Set default redirect URIs if not provided
         redirect_uris = registration_data.get("redirect_uris", [
