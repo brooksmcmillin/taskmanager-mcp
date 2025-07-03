@@ -191,18 +191,43 @@ def create_authorization_server(server_settings: AuthServerSettings, auth_settin
                         form_data = await new_request.form()
                         logger.info(f"Form data: {dict(form_data)}")
                     
-                    # Call original handler
-                    # Create a new request with fresh body stream
-                    from starlette.requests import Request as StarletteRequest
+                    # Call original handler - handle ASGI interface properly
+                    logger.info("Calling original token endpoint")
+                    
+                    # Create a new scope and receive callable with fresh body
                     scope = request.scope.copy()
                     
                     async def receive():
                         return {"type": "http.request", "body": body, "more_body": False}
                     
-                    fresh_request = StarletteRequest(scope, receive)
-                    result = await original_token_route.endpoint(fresh_request)
-                    logger.info(f"Token endpoint result: {result.status_code}")
-                    return result
+                    # Create response handler
+                    response_started = False
+                    response_data = {"status": 500, "headers": [], "body": b""}
+                    
+                    async def send(message):
+                        nonlocal response_started, response_data
+                        if message["type"] == "http.response.start":
+                            response_started = True
+                            response_data["status"] = message["status"]
+                            response_data["headers"] = message.get("headers", [])
+                        elif message["type"] == "http.response.body":
+                            response_data["body"] += message.get("body", b"")
+                    
+                    # Call the endpoint as ASGI app
+                    await original_token_route.app(scope, receive, send)
+                    
+                    logger.info(f"Token endpoint result: {response_data['status']}")
+                    
+                    # Convert headers back to dict format for Response
+                    headers_dict = {}
+                    for name, value in response_data["headers"]:
+                        headers_dict[name.decode()] = value.decode()
+                    
+                    return Response(
+                        content=response_data["body"],
+                        status_code=response_data["status"],
+                        headers=headers_dict
+                    )
                     
                 except Exception as e:
                     logger.error(f"Token endpoint error: {e}")
