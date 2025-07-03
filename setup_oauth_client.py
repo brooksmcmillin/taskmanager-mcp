@@ -41,8 +41,7 @@ async def register_oauth_client(
     """
     if redirect_uris is None:
         redirect_uris = [
-            "http://localhost:9000/oauth/callback",  # MCP auth server callback
-            "http://localhost:3030/callback",       # Test client callback
+            "https://mcp-auth.ROOT_DOMAIN/oauth/callback"
         ]
     
     client_data = {

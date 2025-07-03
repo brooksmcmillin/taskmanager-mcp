@@ -34,8 +34,6 @@ class IntrospectionTokenVerifier(TokenVerifier):
         """Verify token via introspection endpoint."""
         import httpx
 
-        print("Verifying token")
-
         # Validate URL to prevent SSRF attacks
         if not self.introspection_endpoint.startswith(("https://", "http://localhost", "http://127.0.0.1")):
             logger.warning(f"Rejecting introspection endpoint with unsafe scheme: {self.introspection_endpoint}")
@@ -46,7 +44,6 @@ class IntrospectionTokenVerifier(TokenVerifier):
         limits = httpx.Limits(max_connections=10, max_keepalive_connections=5)
 
 
-        print("Made a client")
         async with httpx.AsyncClient(
             timeout=timeout,
             limits=limits,
