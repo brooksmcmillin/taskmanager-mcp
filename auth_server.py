@@ -67,12 +67,34 @@ def load_registered_clients():
         for client_data in response.data:
             client_id = client_data.get('client_id') or client_data.get('clientId')
             if client_id:
+                # Parse JSON strings back to lists if needed
+                redirect_uris = client_data.get('redirect_uris') or client_data.get('redirectUris', [])
+                if isinstance(redirect_uris, str):
+                    try:
+                        redirect_uris = json.loads(redirect_uris)
+                    except json.JSONDecodeError:
+                        redirect_uris = []
+                
+                grant_types = client_data.get('grant_types') or client_data.get('grantTypes', ["authorization_code", "refresh_token"])
+                if isinstance(grant_types, str):
+                    try:
+                        grant_types = json.loads(grant_types)
+                    except json.JSONDecodeError:
+                        grant_types = ["authorization_code", "refresh_token"]
+                
+                response_types = client_data.get('response_types') or ["code"]
+                if isinstance(response_types, str):
+                    try:
+                        response_types = json.loads(response_types)
+                    except json.JSONDecodeError:
+                        response_types = ["code"]
+                
                 clients[client_id] = {
                     "client_id": client_id,
                     "client_secret": client_data.get('client_secret') or client_data.get('clientSecret', 'dummy-secret'),
-                    "redirect_uris": client_data.get('redirect_uris') or client_data.get('redirectUris', []),
-                    "response_types": client_data.get('response_types') or ["code"],
-                    "grant_types": client_data.get('grant_types') or client_data.get('grantTypes', ["authorization_code", "refresh_token"]),
+                    "redirect_uris": redirect_uris,
+                    "response_types": response_types,
+                    "grant_types": grant_types,
                     "token_endpoint_auth_method": client_data.get('token_endpoint_auth_method') or "client_secret_post",
                     "scope": client_data.get('scope') or client_data.get('scopes', "read"),
                     "created_at": client_data.get('created_at') or int(time.time())
