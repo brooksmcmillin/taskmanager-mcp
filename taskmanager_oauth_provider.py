@@ -361,7 +361,14 @@ class TaskManagerOAuthProvider(OAuthAuthorizationServerProvider):
         self, client: OAuthClientInformationFull, authorization_code: str
     ) -> AuthorizationCode | None:
         """Load an authorization code from storage."""
-        return self.auth_codes.get(authorization_code)
+        logger.info(f"Loading authorization code: {authorization_code}")
+        logger.info(f"Available auth codes: {list(self.auth_codes.keys())}")
+        auth_code = self.auth_codes.get(authorization_code)
+        if auth_code:
+            logger.info(f"Found auth code for client: {auth_code.client_id}")
+        else:
+            logger.error(f"Auth code not found: {authorization_code}")
+        return auth_code
 
     async def exchange_authorization_code(
         self, client: OAuthClientInformationFull, authorization_code: AuthorizationCode
@@ -372,7 +379,13 @@ class TaskManagerOAuthProvider(OAuthAuthorizationServerProvider):
         This creates the final MCP access token that will be used by
         the MCP client to access protected resources.
         """
+        logger.info(f"Exchanging MCP authorization code: {authorization_code.code}")
+        logger.info(f"For client: {client.client_id}")
+        logger.info(f"Code challenge: {authorization_code.code_challenge}")
+        
         if authorization_code.code not in self.auth_codes:
+            logger.error(f"Authorization code {authorization_code.code} not found in auth_codes")
+            logger.error(f"Available codes: {list(self.auth_codes.keys())}")
             raise ValueError("Invalid authorization code")
 
         # Generate MCP access token
