@@ -81,8 +81,8 @@ def create_resource_server(settings: ResourceServerSettings) -> FastMCP:
         auth_base = str(settings.auth_server_url).rstrip('/')
         return JSONResponse({
             "issuer": auth_base,
-            "authorization_endpoint": f"{auth_base}/oauth/authorize",
-            "token_endpoint": f"{auth_base}/oauth/token",
+            "authorization_endpoint": f"{auth_base}/authorize",
+            "token_endpoint": f"{auth_base}/token",
             "introspection_endpoint": f"{auth_base}/introspect",
             "registration_endpoint": f"{auth_base}/register",
             "scopes_supported": [settings.mcp_scope],
@@ -109,8 +109,8 @@ def create_resource_server(settings: ResourceServerSettings) -> FastMCP:
         auth_base = str(settings.auth_server_url).rstrip('/')
         return JSONResponse({
             "issuer": auth_base,
-            "authorization_endpoint": f"{auth_base}/oauth/authorize",
-            "token_endpoint": f"{auth_base}/oauth/token",
+            "authorization_endpoint": f"{auth_base}/authorize",
+            "token_endpoint": f"{auth_base}/token",
             "introspection_endpoint": f"{auth_base}/introspect",
             "registration_endpoint": f"{auth_base}/register",
             "scopes_supported": [settings.mcp_scope],
