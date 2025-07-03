@@ -3,6 +3,7 @@ import json
 import logging
 import os
 import time
+from pathlib import Path
 
 import click
 from dotenv import load_dotenv
@@ -45,8 +46,43 @@ class TaskManagerAuthProvider(TaskManagerOAuthProvider):
         super().__init__(auth_settings, server_url)
 
 
-# In-memory client storage (for development - use database in production)
-registered_clients = {}
+# File to persist registered clients
+CLIENTS_FILE = Path("registered_clients.json")
+
+def load_registered_clients():
+    """Load registered clients from file."""
+    if CLIENTS_FILE.exists():
+        try:
+            with open(CLIENTS_FILE, 'r') as f:
+                return json.load(f)
+        except Exception as e:
+            logging.warning(f"Could not load clients file: {e}")
+    
+    # Default pre-registered clients
+    return {
+        # Pre-register Claude Web's cached client ID
+        "claude-code-a6386c3617660a19": {
+            "client_id": "claude-code-a6386c3617660a19",
+            "client_secret": "dummy-secret",  # Claude Web uses "none" auth method
+            "redirect_uris": ["https://claude.ai/api/mcp/auth_callback"],
+            "response_types": ["code"],
+            "grant_types": ["authorization_code", "refresh_token"],
+            "token_endpoint_auth_method": "none",  # Claude Web uses no client authentication
+            "scope": "read",
+            "created_at": 1751347844
+        }
+    }
+
+def save_registered_clients(clients):
+    """Save registered clients to file."""
+    try:
+        with open(CLIENTS_FILE, 'w') as f:
+            json.dump(clients, f, indent=2)
+    except Exception as e:
+        logging.warning(f"Could not save clients file: {e}")
+
+# Load persisted client storage
+registered_clients = load_registered_clients()
 
 def create_authorization_server(server_settings: AuthServerSettings, auth_settings: TaskManagerAuthSettings) -> Starlette:
     """Create the Authorization Server application."""
@@ -189,6 +225,9 @@ def create_authorization_server(server_settings: AuthServerSettings, auth_settin
             "created_at": int(time.time())
         }
         registered_clients[client_id] = client_info
+        
+        # Persist to file
+        save_registered_clients(registered_clients)
         
         # Set default redirect URIs if not provided
         redirect_uris = registration_data.get("redirect_uris", [
