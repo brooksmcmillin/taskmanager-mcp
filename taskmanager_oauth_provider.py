@@ -256,7 +256,7 @@ class TaskManagerOAuthProvider(OAuthAuthorizationServerProvider):
 
         try:
             # Exchange authorization code with taskmanager for access token
-            access_token = await self._exchange_code_with_taskmanager(code)
+            access_token = await self._exchange_code_with_taskmanager(code, state)
             
             # Create MCP authorization code for the original client
             mcp_code = f"mcp_{secrets.token_hex(16)}"
@@ -297,7 +297,7 @@ class TaskManagerOAuthProvider(OAuthAuthorizationServerProvider):
             logger.error(f"Error handling OAuth callback: {e}")
             raise HTTPException(500, "Internal server error during OAuth callback")
 
-    async def _exchange_code_with_taskmanager(self, code: str) -> str:
+    async def _exchange_code_with_taskmanager(self, code: str, state: str) -> str:
         """
         Exchange authorization code with taskmanager for access token.
         
@@ -306,22 +306,26 @@ class TaskManagerOAuthProvider(OAuthAuthorizationServerProvider):
         """
         session = await self._get_session()
         
-        # Get the client info from state mapping to use correct credentials
-        state_data = None
-        for state_key, data in self.state_mapping.items():
-            if code in self.auth_codes:
-                auth_code = self.auth_codes[code]
-                if auth_code.client_id == data["client_id"]:
-                    state_data = data
-                    break
+        # Get the state data that matches this callback
+        state_data = self.state_mapping.get(state)
         
-        # Get the client credentials - check if it's a registered client first
-        client_id = state_data["client_id"] if state_data else self.settings.client_id
-        client_secret = "dummy-secret"  # Default for Claude client
-        
-        if hasattr(self, 'registered_clients') and client_id in self.registered_clients:
-            client_info = self.registered_clients[client_id]
-            client_secret = client_info.get("client_secret", "dummy-secret")
+        if not state_data:
+            logger.error(f"No state data found for state: {state}")
+            # Fallback to TaskManager credentials
+            client_id = self.settings.client_id or "mcp-server-default"
+            client_secret = self.settings.client_secret or "REPLACE_WITH_CLIENT_SECRET"
+        else:
+            # Use the client credentials from the original request
+            client_id = state_data["client_id"]
+            client_secret = "dummy-secret"  # Default for Claude client
+            
+            # Look up the actual client secret from registered clients
+            if hasattr(self, 'registered_clients') and client_id in self.registered_clients:
+                client_info = self.registered_clients[client_id]
+                client_secret = client_info.get("client_secret", "dummy-secret")
+                logger.info(f"Found client secret for {client_id}: {client_secret}")
+            else:
+                logger.warning(f"Client {client_id} not found in registered clients")
         
         token_data = {
             "grant_type": "authorization_code",
