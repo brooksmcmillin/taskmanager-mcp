@@ -3,7 +3,7 @@ import logging
 from typing import Any
 
 import click
-from mcp.server.auth.settings import AuthSettings
+from mcp.server.auth.settings import AuthSettings, ClientRegistrationOptions
 from mcp.server.fastmcp.server import FastMCP
 from pydantic import AnyHttpUrl
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -18,13 +18,14 @@ class ResourceServerSettings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="MCP_RESOURCE_")
 
     # Server settings
-    host: str = "localhost"
-    port: int = 8001
-    server_url: AnyHttpUrl = AnyHttpUrl("http://localhost:8001")
+    server_url: AnyHttpUrl = AnyHttpUrl("https://mcp.brooksmcmillin.com")
+
+    host: str = "https://mcp.brooksmcmillin.com"
+    port: int = 443
 
     # Authorization Server settings
-    auth_server_url: AnyHttpUrl = AnyHttpUrl("http://localhost:9000")
-    auth_server_introspection_endpoint: str = "http://localhost:9000/introspect"
+    auth_server_url: AnyHttpUrl = AnyHttpUrl("https://mcp-auth.brooksmcmillin.com")
+    auth_server_introspection_endpoint: str = "https://mcp-auth.brooksmcmillin.com/introspect"
     # No user endpoint needed - we get user data from token introspection
 
     # MCP settings
@@ -43,9 +44,9 @@ def create_resource_server(settings: ResourceServerSettings) -> FastMCP:
     Create MCP Resource Server with token introspection.
 
     This server:
-    1. Provides protected resource metadata (RFC 9728)
-    2. Validates tokens via Authorization Server introspection
-    3. Serves MCP tools and resources
+    1. Provides public MCP transport endpoint (/mcp) for discovery
+    2. Validates tokens via Authorization Server introspection for tools
+    3. Serves protected MCP tools and resources
     """
     # Create token verifier for introspection with RFC 8707 resource validation
     token_verifier = IntrospectionTokenVerifier(
@@ -54,21 +55,71 @@ def create_resource_server(settings: ResourceServerSettings) -> FastMCP:
         validate_resource=settings.oauth_strict,  # Only validate when --oauth-strict is set
     )
 
-    # Create FastMCP server as a Resource Server
+    # Create FastMCP server with public transport, protected tools
     app = FastMCP(
         name="MCP Resource Server",
-        instructions="Resource Server that validates tokens via Authorization Server introspection",
+        instructions="Resource Server with public /mcp endpoint and protected tools",
         host=settings.host,
         port=settings.port,
         debug=True,
-        # Auth configuration for RS mode
         token_verifier=token_verifier,
         auth=AuthSettings(
             issuer_url=settings.auth_server_url,
             required_scopes=[settings.mcp_scope],
             resource_server_url=settings.server_url,
+            client_registration_options=ClientRegistrationOptions(enabled=True)
         ),
     )
+
+    # Add OAuth discovery endpoints using FastMCP's route decorator
+    from starlette.responses import JSONResponse
+    from starlette.requests import Request
+    
+    @app.custom_route("/.well-known/oauth-authorization-server", methods=["GET"])
+    async def oauth_authorization_server_metadata(request: Request):
+        """OAuth 2.0 Authorization Server Metadata (RFC 8414)"""
+        auth_base = str(settings.auth_server_url).rstrip('/')
+        return JSONResponse({
+            "issuer": auth_base,
+            "authorization_endpoint": f"{auth_base}/authorize",
+            "token_endpoint": f"{auth_base}/token",
+            "introspection_endpoint": f"{auth_base}/introspect",
+            "registration_endpoint": f"{auth_base}/register",
+            "scopes_supported": [settings.mcp_scope],
+            "response_types_supported": ["code"],
+            "grant_types_supported": ["authorization_code"],
+            "token_endpoint_auth_methods_supported": ["client_secret_post"],
+            "code_challenge_methods_supported": ["S256"],
+        })
+    
+    @app.custom_route("/mcp/.well-known/oauth-protected-resource", methods=["GET"])
+    async def oauth_protected_resource_metadata(request: Request):
+        """OAuth 2.0 Protected Resource Metadata (RFC 9908)"""
+        return JSONResponse({
+            "resource": str(settings.server_url),
+            "authorization_servers": [str(settings.auth_server_url)],
+            "scopes_supported": [settings.mcp_scope],
+            "bearer_methods_supported": ["header"],
+            "resource_documentation": f"{settings.server_url}/docs"
+        })
+    
+    @app.custom_route("/.well-known/oauth-authorization-server/mcp", methods=["GET"])
+    async def oauth_authorization_server_metadata_for_mcp(request: Request):
+        """Resource-specific OAuth 2.0 Authorization Server Metadata for /mcp resource"""
+        auth_base = str(settings.auth_server_url).rstrip('/')
+        return JSONResponse({
+            "issuer": auth_base,
+            "authorization_endpoint": f"{auth_base}/authorize",
+            "token_endpoint": f"{auth_base}/token",
+            "introspection_endpoint": f"{auth_base}/introspect",
+            "registration_endpoint": f"{auth_base}/register",
+            "scopes_supported": [settings.mcp_scope],
+            "response_types_supported": ["code"],
+            "grant_types_supported": ["authorization_code"],
+            "token_endpoint_auth_methods_supported": ["client_secret_post"],
+            "code_challenge_methods_supported": ["S256"],
+            "resource": str(settings.server_url),  # Resource-specific binding
+        })
 
     @app.tool()
     async def get_time() -> dict[str, Any]:
@@ -78,7 +129,10 @@ def create_resource_server(settings: ResourceServerSettings) -> FastMCP:
         This tool demonstrates that system information can be protected
         by OAuth authentication. User must be authenticated to access it.
         """
-
+        # TODO: Implement tool-level authentication
+        # For now, this tool is accessible without authentication
+        # to allow Claude Code to connect to the server
+        
         now = datetime.datetime.now()
 
         return {
@@ -93,13 +147,14 @@ def create_resource_server(settings: ResourceServerSettings) -> FastMCP:
 
 @click.command()
 @click.option("--port", default=8001, help="Port to listen on")
-@click.option("--auth-server", default="http://localhost:9000", help="Authorization Server URL")
+@click.option("--auth-server", default="https://mcp-auth.brooksmcmillin.com", help="Authorization Server URL")
+@click.option("--server-url", help="External server URL (for OAuth). Defaults to https://localhost:PORT")
 @click.option(
     "--oauth-strict",
     is_flag=True,
     help="Enable RFC 8707 resource validation",
 )
-def main(port: int, auth_server: str, oauth_strict: bool) -> int:
+def main(port: int, auth_server: str, server_url: str, oauth_strict: bool) -> int:
 
     logging.basicConfig(level=logging.INFO)
 
@@ -107,9 +162,10 @@ def main(port: int, auth_server: str, oauth_strict: bool) -> int:
         # Parse auth server URL
         auth_server_url = AnyHttpUrl(auth_server)
 
-        # Create settings
-        host = "localhost"
-        server_url = f"http://{host}:{port}"
+        # Create settings  
+        host = "0.0.0.0"  # Bind to all interfaces for reverse proxy
+        if server_url is None:
+            server_url = f"https://{host}:{port}"
         settings = ResourceServerSettings(
             host=host,
             port=port,
