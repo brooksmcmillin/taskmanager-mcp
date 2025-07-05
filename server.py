@@ -26,11 +26,11 @@ CLIENT_SECRET = os.environ["TASKMANAGER_CLIENT_SECRET"]
 
 def get_api_client() -> TaskManagerAPI:
     """Get API client for authenticated user.
-
+    
     Currently uses server credentials for all requests.
     In a production system, this should be modified to use
     user-specific authentication tokens.
-
+    
     Returns:
         TaskManagerAPI: Authenticated API client
     """
@@ -157,7 +157,7 @@ def create_resource_server(
 
         Returns a list of all projects that the authenticated user has access to.
         Each project includes its ID, name, description, and other metadata.
-
+        
         Returns:
             JSON string containing list of project objects with fields like id, name, description, created_at, etc.
         """
@@ -177,6 +177,7 @@ def create_resource_server(
 
         Returns:
             JSON string containing list of task objects with fields like id, title, description, status,
+
             priority, project_id, due_date, created_at, etc.
         """
         tasks = get_api_client().get_todos().data
@@ -210,6 +211,7 @@ def create_resource_server(
             The created task object with generated ID and other metadata
         """
         response = get_api_client().create_todo(
+
             title=title,
             project_id=project_id,
             description=description,
