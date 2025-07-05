@@ -36,3 +36,7 @@ urllib3==2.5.0
 uv==0.7.16
 uvicorn==0.35.0
 yarl==1.20.1
+pytest==8.3.4
+pytest-asyncio==0.24.0
+pytest-mock==3.14.0
+pytest-cov==6.0.0
