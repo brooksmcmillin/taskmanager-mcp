@@ -6,8 +6,8 @@ import requests
 from dotenv import load_dotenv
 
 load_dotenv()
-CLIENT_ID = os.environ["TASKMANAGER_CLIENT_ID"]
-CLIENT_SECRET = os.environ["TASKMANAGER_CLIENT_SECRET"]
+CLIENT_ID = ""
+CLIENT_SECRET = ""
 
 @dataclass
 class ApiResponse:
@@ -249,6 +249,8 @@ def create_authenticated_client(username: str, password: str, base_url: str = "h
 
 
 if __name__ == "__main__":
+    CLIENT_ID = os.environ["TASKMANAGER_CLIENT_ID"]
+    CLIENT_SECRET = os.environ["TASKMANAGER_CLIENT_SECRET"]
     api = TaskManagerAPI()
     response = api.login(CLIENT_ID, CLIENT_SECRET)
     print(response)
