@@ -6,8 +6,8 @@ import requests
 from dotenv import load_dotenv
 
 load_dotenv()
-# CLIENT_ID = os.environ["TASK_API_CLIENT_ID"]
-# CLIENT_SECRET = os.environ["TASK_API_CLIENT_SECRET"]
+CLIENT_ID = os.environ["TASKMANAGER_CLIENT_ID"]
+CLIENT_SECRET = os.environ["TASKMANAGER_CLIENT_SECRET"]
 
 @dataclass
 class ApiResponse:
@@ -25,9 +25,9 @@ class TaskManagerAPI:
             'Content-Type': 'application/json',
             'Accept': 'application/json'
         })
-        self.cookies = {}
+        self.cookies: dict[str, Any] = {}
 
-    def _make_request(self, method: str, endpoint: str, data: Optional[dict] = None, params: Optional[dict] = None) -> ApiResponse:
+    def _make_request(self, method: str, endpoint: str, data: dict[str, Any] | None = None, params: dict[str, Any] | None = None) -> ApiResponse:
         url = f"{self.base_url}{endpoint}"
         
         try:
@@ -114,7 +114,7 @@ class TaskManagerAPI:
         return self._make_request('PUT', f'/projects/{project_id}', data)
 
     def get_todos(self, project_id: Optional[int] = None, status: Optional[str] = None, time_horizon: Optional[str] = None) -> ApiResponse:
-        params = {}
+        params: dict[str, Any] = {}
         if project_id is not None:
             params['project_id'] = project_id
         if status is not None:
@@ -152,7 +152,7 @@ class TaskManagerAPI:
                    estimated_hours: Optional[float] = None, status: Optional[str] = None,
                    due_date: Optional[str] = None, tags: Optional[list[str]] = None,
                    context: Optional[str] = None, time_horizon: Optional[str] = None) -> ApiResponse:
-        data = {}
+        data: dict[str, Any] = {}
         if title is not None:
             data['title'] = title
         if project_id is not None:
@@ -175,7 +175,7 @@ class TaskManagerAPI:
             data['time_horizon'] = time_horizon
         return self._make_request('PUT', f'/todos/{todo_id}', data)
 
-    def update_todo_bulk(self, todo_id: int, **kwargs) -> ApiResponse:
+    def update_todo_bulk(self, todo_id: int, **kwargs: Any) -> ApiResponse:
         data = {'id': todo_id}
         data.update(kwargs)
         return self._make_request('PUT', '/todos', data)
@@ -209,7 +209,7 @@ class TaskManagerAPI:
             data['scopes'] = scopes
         return self._make_request('POST', '/oauth/clients', data)
 
-    def oauth_token_exchange(self, grant_type: str, client_id: str, client_secret: str, **kwargs) -> ApiResponse:
+    def oauth_token_exchange(self, grant_type: str, client_id: str, client_secret: str, **kwargs: Any) -> ApiResponse:
         data = {
             'grant_type': grant_type,
             'client_id': client_id,
