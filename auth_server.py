@@ -46,6 +46,7 @@ class TaskManagerAuthProvider(TaskManagerOAuthProvider[AuthorizationCodeT, Refre
 
     def __init__(self, auth_settings: TaskManagerAuthSettings, server_url: str):
         super().__init__(auth_settings, server_url)
+        self.registered_clients: dict[str, Any] = {}
 
 
 # API client for backend database operations
@@ -141,6 +142,8 @@ def load_registered_clients() -> dict[str, Any]:
 
     return clients
 
+# Load persisted client storage
+registered_clients = {}
 
 def create_authorization_server(
     host: str, port: int, server_url: AnyHttpUrl, auth_settings: TaskManagerAuthSettings
@@ -149,6 +152,11 @@ def create_authorization_server(
     oauth_provider = TaskManagerAuthProvider(  # type: ignore[var-annotated]
         auth_settings, str(server_url)
     )
+
+    # Load and share registered clients with OAuth provider
+    global registered_clients
+    registered_clients = load_registered_clients()
+    oauth_provider.registered_clients = registered_clients
 
     mcp_auth_settings = AuthSettings(
         issuer_url=server_url,
@@ -444,6 +452,7 @@ def create_authorization_server(
             "scope": auth_settings.mcp_scope,
             "created_at": int(time.time()),
         }
+        registered_clients[client_id] = client_info
 
         # RFC 7591 client registration response
         registration_response = {
