@@ -6,7 +6,7 @@ to provide authentication for MCP (Model Context Protocol) servers.
 
 OAuth 2.0 Flow Overview:
 1. Authorization Request: Client redirects user to /oauth/authorize
-2. User Login: User authenticates with taskmanager credentials  
+2. User Login: User authenticates with taskmanager credentials
 3. Authorization Grant: User consents, server creates authorization code
 4. Access Token Request: Client exchanges code for access token at /oauth/token
 5. Resource Access: Client uses access token to access protected MCP resources
@@ -18,16 +18,19 @@ delegating the actual OAuth logic to your existing taskmanager endpoints.
 import logging
 import secrets
 import time
-from typing import Any, Optional
+from typing import Any, Optional, cast
 from urllib.parse import urlencode
 
 import aiohttp
 from mcp.server.auth.provider import (
     AccessToken,
+    AccessTokenT,
     AuthorizationCode,
+    AuthorizationCodeT,
     AuthorizationParams,
     OAuthAuthorizationServerProvider,
     RefreshToken,
+    RefreshTokenT,
     construct_redirect_uri,
 )
 from mcp.shared.auth import OAuthClientInformationFull, OAuthToken
@@ -43,11 +46,11 @@ logger = logging.getLogger(__name__)
 class TaskManagerAuthSettings(BaseSettings):
     """
     Settings for TaskManager OAuth integration.
-    
+
     These settings configure how the MCP server connects to your taskmanager
     OAuth endpoints for authentication.
     """
-    
+
     model_config = SettingsConfigDict(env_prefix="TASKMANAGER_")
 
     # TaskManager OAuth endpoints
@@ -55,31 +58,31 @@ class TaskManagerAuthSettings(BaseSettings):
     authorize_endpoint: str = "/api/oauth/authorize"
     token_endpoint: str = "/api/oauth/token"
     clients_endpoint: str = "/api/oauth/clients"
-    
+
     # OAuth client credentials (will be auto-registered if not provided)
     client_id: Optional[str] = None
     client_secret: Optional[str] = None
     client_name: str = "MCP Server"
-    
+
     # MCP-specific settings
     mcp_scope: str = "read"  # Default scope for MCP access
-    
+
     # Session settings for admin operations (if needed)
     admin_session_cookie: Optional[str] = None  # For auto-registering clients
 
 
-class TaskManagerOAuthProvider(OAuthAuthorizationServerProvider):
+class TaskManagerOAuthProvider(OAuthAuthorizationServerProvider[AuthorizationCodeT, RefreshTokenT, AccessTokenT]):
     """
     OAuth provider that integrates with TaskManager's existing OAuth endpoints.
-    
+
     This provider acts as a bridge between the MCP server authentication system
     and your existing taskmanager OAuth implementation. It handles:
-    
+
     1. Client registration with taskmanager
     2. OAuth authorization flow delegation
     3. Token exchange and validation
     4. User information retrieval
-    
+
     The actual OAuth logic is handled by your taskmanager endpoints, while this
     provider manages the MCP-specific integration details.
     """
@@ -87,7 +90,7 @@ class TaskManagerOAuthProvider(OAuthAuthorizationServerProvider):
     def __init__(self, settings: TaskManagerAuthSettings, server_url: str):
         """
         Initialize the TaskManager OAuth provider.
-        
+
         Args:
             settings: Configuration for connecting to taskmanager
             server_url: The URL of this MCP server (for redirect URIs)
@@ -95,17 +98,17 @@ class TaskManagerOAuthProvider(OAuthAuthorizationServerProvider):
         self.settings = settings
         print(f"Setting up for {server_url}")
         self.server_url = server_url
-        
+
         # In-memory storage for this demo
         # In production, you might want to use persistent storage
         self.clients: dict[str, OAuthClientInformationFull] = {}
         self.auth_codes: dict[str, AuthorizationCode] = {}
         self.tokens: dict[str, AccessToken] = {}
         self.state_mapping: dict[str, dict[str, str | None]] = {}
-        
+
         # HTTP session for making requests to taskmanager
         self._session: Optional[aiohttp.ClientSession] = None
-        
+
         logger.info(f"Initialized TaskManager OAuth provider for {settings.base_url}")
 
     async def _get_session(self) -> aiohttp.ClientSession:
@@ -119,7 +122,7 @@ class TaskManagerOAuthProvider(OAuthAuthorizationServerProvider):
             self._session = aiohttp.ClientSession(headers=headers)
         return self._session
 
-    async def close(self):
+    async def close(self) -> None:
         """Clean up HTTP session."""
         if self._session:
             await self._session.close()
@@ -128,80 +131,98 @@ class TaskManagerOAuthProvider(OAuthAuthorizationServerProvider):
     async def get_client(self, client_id: str) -> OAuthClientInformationFull | None:
         """
         Get OAuth client information.
-        
+
         This first checks our local cache, then attempts to retrieve from
         taskmanager if not found locally.
         """
-        logger.info(f"=== GET CLIENT ===")
+        logger.info("=== GET CLIENT ===")
         logger.info(f"Looking for client: {client_id}")
         logger.info(f"Local cache clients: {list(self.clients.keys())}")
-        
+
         # Force reload for Claude client to pick up auth method changes
         if client_id == "CLAUDE_ID" and client_id in self.clients:
-            logger.info(f"Clearing cache for Claude client to force reload")
+            logger.info("Clearing cache for Claude client to force reload")
             del self.clients[client_id]
-        
+
         # Check local cache first
         if client_id in self.clients:
             cached_client = self.clients[client_id]
             logger.info(f"Found client {client_id} in local cache")
-            logger.info(f"Cached client auth method: {cached_client.token_endpoint_auth_method}")
+            logger.info(
+                f"Cached client auth method: {cached_client.token_endpoint_auth_method}"
+            )
             return cached_client
-            
+
         # Check registered clients from auth server
-        if hasattr(self, 'registered_clients'):
+        if hasattr(self, "registered_clients"):
             logger.info(f"Registered clients: {list(self.registered_clients.keys())}")
             if client_id in self.registered_clients:
                 client_data = self.registered_clients[client_id]
-                logger.info(f"Found client {client_id} in registered clients: {client_data}")
-                
+                logger.info(
+                    f"Found client {client_id} in registered clients: {client_data}"
+                )
+
                 # Convert to OAuthClientInformationFull format
-                logger.info(f"Creating OAuthClientInformationFull with auth_method: {client_data['token_endpoint_auth_method']}")
-                
+                logger.info(
+                    f"Creating OAuthClientInformationFull with auth_method: {client_data['token_endpoint_auth_method']}"
+                )
+
                 # For "none" auth method, don't provide client_secret
-                client_secret = None if client_data["token_endpoint_auth_method"] == "none" else client_data["client_secret"]
-                logger.info(f"Using client_secret: {client_secret} for auth method: {client_data['token_endpoint_auth_method']}")
-                
+                client_secret = (
+                    None
+                    if client_data["token_endpoint_auth_method"] == "none"
+                    else client_data["client_secret"]
+                )
+                logger.info(
+                    f"Using client_secret: {client_secret} for auth method: {client_data['token_endpoint_auth_method']}"
+                )
+
                 client_info = OAuthClientInformationFull(
                     client_id=client_data["client_id"],
                     client_secret=client_secret,
                     redirect_uris=client_data["redirect_uris"],
                     response_types=client_data["response_types"],
                     grant_types=client_data["grant_types"],
-                    token_endpoint_auth_method=client_data["token_endpoint_auth_method"],
-                    scope=client_data["scope"]
+                    token_endpoint_auth_method=client_data[
+                        "token_endpoint_auth_method"
+                    ],
+                    scope=client_data["scope"],
                 )
                 # Cache it locally for future use
                 self.clients[client_id] = client_info
                 logger.info(f"Successfully converted and cached client {client_id}")
-                logger.info(f"Final client auth method: {client_info.token_endpoint_auth_method}")
+                logger.info(
+                    f"Final client auth method: {client_info.token_endpoint_auth_method}"
+                )
                 return client_info
         else:
             logger.warning("No registered_clients attribute found on provider")
-            
+
         # TODO: Add endpoint to taskmanager to retrieve client info by ID
         # For now, return None if not found locally
-        logger.error(f"Client {client_id} not found in local cache or registered clients")
+        logger.error(
+            f"Client {client_id} not found in local cache or registered clients"
+        )
         return None
 
-    async def register_client(self, client_info: OAuthClientInformationFull):
+    async def register_client(self, client_info: OAuthClientInformationFull) -> None:
         """
         Register a new OAuth client.
-        
+
         This stores the client information locally and optionally registers
         it with the taskmanager system if admin credentials are available.
         """
         self.clients[client_info.client_id] = client_info
         logger.info(f"Registered OAuth client: {client_info.client_id}")
-        
+
         # TODO: Optionally register with taskmanager if admin session available
         if self.settings.admin_session_cookie:
             await self._register_with_taskmanager(client_info)
 
-    async def _register_with_taskmanager(self, client_info: OAuthClientInformationFull):
+    async def _register_with_taskmanager(self, client_info: OAuthClientInformationFull) -> None:
         """
         Register client with taskmanager (requires admin session).
-        
+
         This is a stub for automatically registering MCP clients with your
         taskmanager system. You'll need to implement the admin authentication
         part based on your needs.
@@ -211,10 +232,12 @@ class TaskManagerOAuthProvider(OAuthAuthorizationServerProvider):
         logger.info("Auto-registration with taskmanager not yet implemented")
         pass
 
-    async def authorize(self, client: OAuthClientInformationFull, params: AuthorizationParams) -> str:
+    async def authorize(
+        self, client: OAuthClientInformationFull, params: AuthorizationParams
+    ) -> str:
         """
         Generate authorization URL that redirects to taskmanager's OAuth flow.
-        
+
         This creates the authorization URL that will redirect users to your
         taskmanager's OAuth consent page. The user will authenticate there
         and then be redirected back to complete the MCP authentication.
@@ -225,7 +248,9 @@ class TaskManagerOAuthProvider(OAuthAuthorizationServerProvider):
         self.state_mapping[state] = {
             "redirect_uri": str(params.redirect_uri),
             "code_challenge": params.code_challenge,
-            "redirect_uri_provided_explicitly": str(params.redirect_uri_provided_explicitly),
+            "redirect_uri_provided_explicitly": str(
+                params.redirect_uri_provided_explicitly
+            ),
             "client_id": client.client_id,
             "resource": params.resource,  # RFC 8707 resource parameter
         }
@@ -239,7 +264,7 @@ class TaskManagerOAuthProvider(OAuthAuthorizationServerProvider):
             "scope": self.settings.mcp_scope,
             "state": state,
         }
-        
+
         # Note: We intentionally do NOT forward PKCE parameters to TaskManager
         # because we're acting as a proxy. The MCP client's PKCE verification
         # will be handled by the MCP auth server directly.
@@ -255,7 +280,7 @@ class TaskManagerOAuthProvider(OAuthAuthorizationServerProvider):
     async def handle_oauth_callback(self, request: Request) -> Response:
         """
         Handle OAuth callback from taskmanager.
-        
+
         This processes the authorization code received from taskmanager's
         OAuth flow and exchanges it for an access token, then creates
         an MCP authorization code for the original client.
@@ -282,17 +307,20 @@ class TaskManagerOAuthProvider(OAuthAuthorizationServerProvider):
         try:
             # Exchange authorization code with taskmanager for access token
             access_token = await self._exchange_code_with_taskmanager(code, state)
-            
+
             # Create MCP authorization code for the original client
             mcp_code = f"mcp_{secrets.token_hex(16)}"
             auth_code = AuthorizationCode(
                 code=mcp_code,
-                client_id=state_data["client_id"],
-                redirect_uri=AnyHttpUrl(state_data["redirect_uri"]),
-                redirect_uri_provided_explicitly=state_data["redirect_uri_provided_explicitly"] == "True",
+                client_id=state_data["client_id"] or "",
+                redirect_uri=AnyHttpUrl(state_data["redirect_uri"] or ""),
+                redirect_uri_provided_explicitly=state_data[
+                    "redirect_uri_provided_explicitly"
+                ]
+                == "True",
                 expires_at=time.time() + 300,  # 5 minutes
                 scopes=[self.settings.mcp_scope],
-                code_challenge=state_data["code_challenge"],
+                code_challenge=state_data["code_challenge"] or "",
                 resource=state_data.get("resource"),
             )
             self.auth_codes[mcp_code] = auth_code
@@ -301,7 +329,7 @@ class TaskManagerOAuthProvider(OAuthAuthorizationServerProvider):
             # TODO: You might want to validate/introspect the token here
             self.tokens[f"tm_{access_token}"] = AccessToken(
                 token=f"tm_{access_token}",
-                client_id=state_data["client_id"],
+                client_id=state_data["client_id"] or "",
                 scopes=[self.settings.mcp_scope],
                 expires_at=int(time.time()) + 3600,  # 1 hour
                 resource=state_data.get("resource"),
@@ -312,9 +340,7 @@ class TaskManagerOAuthProvider(OAuthAuthorizationServerProvider):
 
             # Redirect back to original client
             redirect_uri = construct_redirect_uri(
-                state_data["redirect_uri"], 
-                code=mcp_code, 
-                state=state
+                state_data["redirect_uri"] or "", code=mcp_code, state=state
             )
             return RedirectResponse(url=redirect_uri, status_code=302)
 
@@ -325,15 +351,15 @@ class TaskManagerOAuthProvider(OAuthAuthorizationServerProvider):
     async def _exchange_code_with_taskmanager(self, code: str, state: str) -> str:
         """
         Exchange authorization code with taskmanager for access token.
-        
+
         This makes a request to your taskmanager's token endpoint to
         exchange the authorization code for an access token.
         """
         session = await self._get_session()
-        
+
         # Get the state data that matches this callback
         state_data = self.state_mapping.get(state)
-        
+
         if not state_data:
             logger.error(f"No state data found for state: {state}")
             # Fallback to TaskManager credentials
@@ -341,17 +367,20 @@ class TaskManagerOAuthProvider(OAuthAuthorizationServerProvider):
             client_secret = self.settings.client_secret or "REPLACE_WITH_CLIENT_SECRET"
         else:
             # Use the client credentials from the original request
-            client_id = state_data["client_id"]
+            client_id = state_data["client_id"] or ""
             client_secret = "dummy-secret"  # Default for Claude client
-            
+
             # Look up the actual client secret from registered clients
-            if hasattr(self, 'registered_clients') and client_id in self.registered_clients:
+            if (
+                hasattr(self, "registered_clients")
+                and client_id in self.registered_clients
+            ):
                 client_info = self.registered_clients[client_id]
                 client_secret = client_info.get("client_secret", "dummy-secret")
                 logger.info(f"Found client secret for {client_id}: {client_secret}")
             else:
                 logger.warning(f"Client {client_id} not found in registered clients")
-        
+
         token_data = {
             "grant_type": "authorization_code",
             "code": code,
@@ -361,36 +390,38 @@ class TaskManagerOAuthProvider(OAuthAuthorizationServerProvider):
         }
 
         token_url = f"{self.settings.base_url}{self.settings.token_endpoint}"
-        
+
         logger.info(f"Exchanging token at {token_url} with data: {token_data}")
-        
+
         async with session.post(token_url, data=token_data) as response:
             if response.status != 200:
                 error_text = await response.text()
                 logger.error(f"Token exchange failed: {response.status} - {error_text}")
                 logger.error(f"Request data was: {token_data}")
                 raise HTTPException(400, f"Token exchange failed: {response.status}")
-            
+
             token_response = await response.json()
             logger.info(f"Token response from TaskManager: {token_response}")
             access_token = token_response.get("access_token")
-            
+
             if not access_token:
-                logger.error(f"No access token in response. Full response: {token_response}")
+                logger.error(
+                    f"No access token in response. Full response: {token_response}"
+                )
                 raise HTTPException(400, "No access token received")
-            
+
             logger.info("Successfully exchanged code for access token")
-            return access_token
+            return str(access_token)
 
     async def load_authorization_code(
         self, client: OAuthClientInformationFull, authorization_code: str
-    ) -> AuthorizationCode | None:
+    ) -> AuthorizationCodeT | None:
         """Load an authorization code from storage."""
-        logger.info(f"=== LOADING AUTH CODE ===")
+        logger.info("=== LOADING AUTH CODE ===")
         logger.info(f"Requested code: {authorization_code}")
         logger.info(f"Client: {client.client_id}")
         logger.info(f"Available auth codes: {list(self.auth_codes.keys())}")
-        
+
         auth_code = self.auth_codes.get(authorization_code)
         if auth_code:
             logger.info(f"Found auth code for client: {auth_code.client_id}")
@@ -399,27 +430,31 @@ class TaskManagerOAuthProvider(OAuthAuthorizationServerProvider):
             logger.info(f"Auth code redirect URI: {auth_code.redirect_uri}")
         else:
             logger.error(f"Auth code not found: {authorization_code}")
-            logger.error(f"This suggests the OAuth callback flow never completed properly")
-        return auth_code
+            logger.error(
+                "This suggests the OAuth callback flow never completed properly"
+            )
+        return cast(AuthorizationCodeT, auth_code)
 
     async def exchange_authorization_code(
         self, client: OAuthClientInformationFull, authorization_code: AuthorizationCode
     ) -> OAuthToken:
         """
         Exchange MCP authorization code for MCP access token.
-        
+
         This creates the final MCP access token that will be used by
         the MCP client to access protected resources.
         """
-        logger.info(f"=== EXCHANGING AUTH CODE ===")
+        logger.info("=== EXCHANGING AUTH CODE ===")
         logger.info(f"Auth code: {authorization_code.code}")
         logger.info(f"Client: {client.client_id}")
         logger.info(f"Code challenge: {authorization_code.code_challenge}")
         logger.info(f"Scopes: {authorization_code.scopes}")
         logger.info(f"Redirect URI: {authorization_code.redirect_uri}")
-        
+
         if authorization_code.code not in self.auth_codes:
-            logger.error(f"Authorization code {authorization_code.code} not found in auth_codes")
+            logger.error(
+                f"Authorization code {authorization_code.code} not found in auth_codes"
+            )
             logger.error(f"Available codes: {list(self.auth_codes.keys())}")
             raise ValueError("Invalid authorization code")
 
@@ -452,10 +487,10 @@ class TaskManagerOAuthProvider(OAuthAuthorizationServerProvider):
 
         return oauth_token
 
-    async def load_access_token(self, token: str) -> AccessToken | None:
+    async def load_access_token(self, token: str) -> AccessTokenT | None:
         """
         Load and validate an access token.
-        
+
         This checks if the token exists and hasn't expired. For tokens
         that were issued based on taskmanager authentication, you might
         want to add additional validation here.
@@ -472,9 +507,11 @@ class TaskManagerOAuthProvider(OAuthAuthorizationServerProvider):
             del self.tokens[token]
             return None
 
-        return access_token
+        return cast(AccessTokenT, access_token)
 
-    async def load_refresh_token(self, client: OAuthClientInformationFull, refresh_token: str) -> RefreshToken | None:
+    async def load_refresh_token(
+        self, client: OAuthClientInformationFull, refresh_token: str
+    ) -> RefreshTokenT | None:
         """Load a refresh token - implement if refresh tokens are needed."""
         # TODO: Implement refresh token support if needed
         return None
@@ -489,21 +526,23 @@ class TaskManagerOAuthProvider(OAuthAuthorizationServerProvider):
         # TODO: Implement refresh token exchange if needed
         raise NotImplementedError("Refresh tokens not yet implemented")
 
-    async def revoke_token(self, token: str, token_type_hint: str | None = None) -> None:
+    async def revoke_token(
+        self, token: AccessToken | RefreshToken
+    ) -> None:
         """
         Revoke a token.
-        
+
         This removes the token from local storage. You might also want to
         notify the taskmanager system about token revocation.
         """
         if token in self.tokens:
-            del self.tokens[token]
-            logger.info(f"Revoked token: {token[:10]}...")
+            del self.tokens[str(token)]
+            logger.info(f"Revoked token: {str(token)[:10]}...")
 
     async def introspect_token(self, token: str) -> dict[str, Any] | None:
         """
         Introspect a token for Resource Server validation.
-        
+
         This is used by MCP Resource Servers to validate tokens without
         direct access to token storage. Returns token metadata if valid.
         """
@@ -528,16 +567,16 @@ def create_taskmanager_oauth_provider(
     server_url: str = "https://mcp.ROOT_DOMAIN",
     client_id: Optional[str] = None,
     client_secret: Optional[str] = None,
-) -> TaskManagerOAuthProvider:
+) -> TaskManagerOAuthProvider[AuthorizationCode, RefreshToken, AccessToken]:
     """
     Convenience function to create a TaskManager OAuth provider.
-    
+
     Args:
         taskmanager_base_url: Base URL of your taskmanager application
         server_url: URL of this MCP server
         client_id: OAuth client ID (if already registered)
         client_secret: OAuth client secret (if already registered)
-    
+
     Returns:
         Configured TaskManagerOAuthProvider instance
     """
@@ -546,5 +585,5 @@ def create_taskmanager_oauth_provider(
         client_id=client_id,
         client_secret=client_secret,
     )
-    
+
     return TaskManagerOAuthProvider(settings, server_url)
