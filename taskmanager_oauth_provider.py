@@ -16,8 +16,10 @@ delegating the actual OAuth logic to your existing taskmanager endpoints.
 """
 
 import logging
+import os
 import secrets
 import time
+from dotenv import load_dotenv
 from typing import Any, Optional, cast
 from urllib.parse import urlencode
 
@@ -42,6 +44,9 @@ from starlette.responses import RedirectResponse, Response
 
 logger = logging.getLogger(__name__)
 
+load_dotenv()
+OAUTH_PROVIDER = os.environ["TASKMANAGER_OAUTH_HOST"]
+MCP_SERVER = os.environ["MCP_SERVER"]
 
 class TaskManagerAuthSettings(BaseSettings):
     """
@@ -563,8 +568,8 @@ class TaskManagerOAuthProvider(OAuthAuthorizationServerProvider[AuthorizationCod
 
 # Helper function to create provider instance
 def create_taskmanager_oauth_provider(
-    taskmanager_base_url: str = "https://todo.ROOT_DOMAIN",
-    server_url: str = "https://mcp.ROOT_DOMAIN",
+    taskmanager_base_url: str = OAUTH_PROVIDER,
+    server_url: str = MCP_SERVER,
     client_id: Optional[str] = None,
     client_secret: Optional[str] = None,
 ) -> TaskManagerOAuthProvider[AuthorizationCode, RefreshToken, AccessToken]:

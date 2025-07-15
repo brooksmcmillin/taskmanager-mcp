@@ -24,16 +24,6 @@ from taskmanager_oauth_provider import TaskManagerAuthSettings, TaskManagerOAuth
 load_dotenv()
 logger = logging.getLogger(__name__)
 
-"""
-class AuthServerSettings(BaseModel):
-
-    # Server settings
-    host: str = "localhost"
-    port: int = 9000
-    server_url: AnyHttpUrl = AnyHttpUrl("http://localhost:9000")
-    auth_callback_path: str = "https://mcp-auth.ROOT_DOMAIN/login/callback"
-"""
-
 class TaskManagerAuthProvider(TaskManagerOAuthProvider[AuthorizationCodeT, RefreshTokenT, AccessTokenT]):
     """
     Authorization Server provider that integrates with TaskManager OAuth.
