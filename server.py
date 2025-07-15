@@ -22,6 +22,7 @@ DEFAULT_SCOPE = ["read"]
 load_dotenv()
 CLIENT_ID = os.environ["TASKMANAGER_CLIENT_ID"]
 CLIENT_SECRET = os.environ["TASKMANAGER_CLIENT_SECRET"]
+MCP_AUTH_SERVER = os.environ["MCP_AUTH_SERVER"]
 
 
 def get_api_client() -> TaskManagerAPI:
@@ -227,7 +228,7 @@ def create_resource_server(
 @click.option("--port", default=8001, help="Port to listen on")
 @click.option(
     "--auth-server",
-    default="https://mcp-auth.brooksmcmillin.com",
+    default=MCP_AUTH_SERVER,
     help="Authorization Server URL",
 )
 @click.option(
