@@ -18,7 +18,11 @@ from typing import Any, Optional
 
 import aiohttp
 import click
+import os
+from dotenv import load_dotenv
 
+load_dotenv()
+MCP_AUTH_SERVER = os.environ["MCP_AUTH_SERVER"]
 
 async def register_oauth_client(
     taskmanager_url: str,
@@ -39,7 +43,7 @@ async def register_oauth_client(
         OAuth client information including client_id and client_secret
     """
     if redirect_uris is None:
-        redirect_uris = ["https://mcp-auth.ROOT_DOMAIN/oauth/callback"]
+        redirect_uris = [f"{MCP_AUTH_SERVER}/oauth/callback"]
 
     client_data = {
         "name": client_name,
