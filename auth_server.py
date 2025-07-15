@@ -110,7 +110,7 @@ def load_registered_clients() -> dict[str, Any]:
                 # Determine auth method - Claude uses "none", others use "client_secret_post"
                 auth_method = (
                     "none"
-                    if client_id == "CLAUDE_ID"
+                    if client_id[0:11] == "claude-code"
                     else "client_secret_post"
                 )
 
