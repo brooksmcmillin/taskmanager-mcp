@@ -144,11 +144,6 @@ class TaskManagerOAuthProvider(OAuthAuthorizationServerProvider[AuthorizationCod
         logger.info(f"Looking for client: {client_id}")
         logger.info(f"Local cache clients: {list(self.clients.keys())}")
 
-        # Force reload for Claude client to pick up auth method changes
-        if client_id == "claude-code-a6386c3617660a19" and client_id in self.clients:
-            logger.info("Clearing cache for Claude client to force reload")
-            del self.clients[client_id]
-
         # Check local cache first
         if client_id in self.clients:
             cached_client = self.clients[client_id]
@@ -261,9 +256,8 @@ class TaskManagerOAuthProvider(OAuthAuthorizationServerProvider[AuthorizationCod
         }
 
         # Build authorization URL pointing to taskmanager
-        # Use the original client_id (Claude's) for the TaskManager OAuth flow
         auth_params = {
-            "client_id": client.client_id,  # Use the actual client ID (claude-code-a6386c3617660a19)
+            "client_id": client.client_id,  # Use the actual client ID
             "redirect_uri": f"{self.server_url.rstrip('/')}/oauth/callback",  # This server handles callback
             "response_type": "code",
             "scope": self.settings.mcp_scope,
