@@ -169,6 +169,8 @@ def main(
                 taskmanager_url, session_cookie, client_name
             )
 
+            print(client_info)
+
             print("✅ OAuth client registered successfully!")
             print("\n📋 Client Information:")
             print(f"Client ID: {client_info['client_id']}")
