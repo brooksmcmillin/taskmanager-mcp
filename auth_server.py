@@ -4,6 +4,7 @@ import logging
 import os
 import secrets
 import time
+from collections.abc import Awaitable, Callable
 from typing import Any, cast
 
 import click
@@ -539,8 +540,8 @@ def create_authorization_server(
     )
 
     # Add logging middleware
-    async def log_requests(request: Request, call_next):
-        logger.info(f"=== Incoming Request to Auth Server ===")
+    async def log_requests(request: Request, call_next: Callable[[Request], Awaitable[Response]]) -> Response:
+        logger.info("=== Incoming Request to Auth Server ===")
         logger.info(f"Method: {request.method}")
         logger.info(f"URL: {request.url}")
         logger.info(f"Path: {request.url.path}")
@@ -558,7 +559,7 @@ def create_authorization_server(
     from starlette.middleware.base import BaseHTTPMiddleware
 
     class LoggingMiddleware(BaseHTTPMiddleware):
-        async def dispatch(self, request, call_next):
+        async def dispatch(self, request: Request, call_next: Callable[[Request], Awaitable[Response]]) -> Response:
             return await log_requests(request, call_next)
 
     return Starlette(routes=routes, middleware=[Middleware(LoggingMiddleware)])
