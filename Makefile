@@ -51,19 +51,19 @@ pre-commit:  ## Run pre-commit hooks on all files
 	pre-commit run --all-files
 
 docker-build:  ## Build Docker images
-	docker-compose build
+	docker compose build
 
 docker-up:  ## Start Docker containers
-	docker-compose up -d
+	docker compose up -d
 
 docker-down:  ## Stop Docker containers
-	docker-compose down
+	docker compose down
 
 docker-logs:  ## Show Docker logs
-	docker-compose logs -f
+	docker compose logs -f
 
 docker-restart:  ## Restart Docker containers
-	docker-compose restart
+	docker compose restart
 
 clean:  ## Clean up generated files
 	find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true

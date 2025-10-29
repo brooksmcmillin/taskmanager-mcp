@@ -27,11 +27,11 @@ MCP_AUTH_SERVER = os.environ["MCP_AUTH_SERVER"]
 
 def get_api_client() -> TaskManagerAPI:
     """Get API client for authenticated user.
-    
+
     Currently uses server credentials for all requests.
     In a production system, this should be modified to use
     user-specific authentication tokens.
-    
+
     Returns:
         TaskManagerAPI: Authenticated API client
     """
@@ -43,7 +43,11 @@ def get_api_client() -> TaskManagerAPI:
 
 
 def create_resource_server(
-    port: int, server_url: str, auth_server_url: str, auth_server_public_url: str, oauth_strict: bool
+    port: int,
+    server_url: str,
+    auth_server_url: str,
+    auth_server_public_url: str,
+    oauth_strict: bool,
 ) -> FastMCP:
     """
     Create MCP Resource Server with token introspection.
@@ -123,7 +127,7 @@ def create_resource_server(
                     "Access-Control-Allow-Origin": "*",
                     "Access-Control-Allow-Methods": "GET, OPTIONS",
                     "Access-Control-Allow-Headers": "*",
-                }
+                },
             )
 
         # OpenID Connect discovery - return same metadata as OAuth
@@ -151,7 +155,7 @@ def create_resource_server(
                 "Access-Control-Allow-Origin": "*",
                 "Access-Control-Allow-Methods": "GET, OPTIONS",
                 "Access-Control-Allow-Headers": "*",
-            }
+            },
         )
 
     @app.custom_route("/.well-known/oauth-authorization-server", methods=["GET", "OPTIONS"])
@@ -165,7 +169,7 @@ def create_resource_server(
                     "Access-Control-Allow-Origin": "*",
                     "Access-Control-Allow-Methods": "GET, OPTIONS",
                     "Access-Control-Allow-Headers": "*",
-                }
+                },
             )
 
         # Use public auth server URL for client-facing OAuth metadata
@@ -196,7 +200,7 @@ def create_resource_server(
                 "Access-Control-Allow-Origin": "*",
                 "Access-Control-Allow-Methods": "GET, OPTIONS",
                 "Access-Control-Allow-Headers": "*",
-            }
+            },
         )
 
     @app.custom_route("/mcp/.well-known/oauth-protected-resource", methods=["GET"])
@@ -275,7 +279,7 @@ def create_resource_server(
 
         Returns a list of all projects that the authenticated user has access to.
         Each project includes its ID, name, description, and other metadata.
-        
+
         Returns:
             JSON string containing list of project objects with fields like id, name, description, created_at, etc.
         """
@@ -329,7 +333,6 @@ def create_resource_server(
             The created task object with generated ID and other metadata
         """
         response = get_api_client().create_todo(
-
             title=title,
             project_id=project_id,
             description=description,
@@ -361,7 +364,13 @@ def create_resource_server(
     is_flag=True,
     help="Enable RFC 8707 resource validation",
 )
-def main(port: int, auth_server: str, auth_server_public_url: str | None = None, server_url: str | None = None, oauth_strict: bool = False) -> int:
+def main(
+    port: int,
+    auth_server: str,
+    auth_server_public_url: str | None = None,
+    server_url: str | None = None,
+    oauth_strict: bool = False,
+) -> int:
     """
     Run the TaskManager MCP server.
 
@@ -400,12 +409,12 @@ def main(port: int, auth_server: str, auth_server_public_url: str | None = None,
             port, server_url, auth_server, auth_server_public_url, oauth_strict
         )
 
-        logger.info("="*60)
+        logger.info("=" * 60)
         logger.info(f"🚀 MCP Resource Server running on {server_url}")
         logger.info(f"🔑 Using Authorization Server (internal): {auth_server}")
         logger.info(f"🌐 Using Authorization Server (public): {auth_server_public_url}")
         logger.info(f"📍 Resource Server URL (for OAuth): {server_url}")
-        logger.info("="*60)
+        logger.info("=" * 60)
 
         # Run the server - bind to 0.0.0.0 for Docker networking
         # FastMCP handles CORS internally for discovery endpoints
@@ -418,7 +427,7 @@ def main(port: int, auth_server: str, auth_server_public_url: str | None = None,
             port=port,
             log_level="info",
             proxy_headers=True,
-            forwarded_allow_ips="*"
+            forwarded_allow_ips="*",
         )
         logger.info("Server stopped")
         return 0

@@ -65,9 +65,7 @@ class IntrospectionTokenVerifier(TokenVerifier):
                 )
 
                 if response.status_code != 200:
-                    logger.debug(
-                        f"Token introspection returned status {response.status_code}"
-                    )
+                    logger.debug(f"Token introspection returned status {response.status_code}")
                     return None
 
                 data = response.json()

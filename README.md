@@ -19,7 +19,7 @@ A Model Context Protocol (MCP) server that provides secure, OAuth-protected acce
 
 1. Register an OAuth client in TaskManager named "brooks" with redirect URI: `https://your-auth-server.com/oauth/callback`
 2. Create `.env` file with your TaskManager OAuth credentials and server URLs (see Environment Variables section)
-3. Run `docker-compose up -d --build`
+3. Run `docker compose up -d --build`
 4. Configure nginx reverse proxy with SSL (see example configs in repo)
 5. Connect with MCP Inspector at `https://your-resource-server.com/mcp/` (note trailing slash!)
 
@@ -86,17 +86,17 @@ This client is used by the auth server to delegate authentication to TaskManager
 
 1. Build and start the containers:
 ```bash
-docker-compose up -d --build
+docker compose up -d --build
 ```
 
 2. Check logs:
 ```bash
-docker-compose logs -f
+docker compose logs -f
 ```
 
 3. Stop the servers:
 ```bash
-docker-compose down
+docker compose down
 ```
 
 The `docker-compose.yml` configures:

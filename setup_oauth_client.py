@@ -24,6 +24,7 @@ from dotenv import load_dotenv
 load_dotenv()
 MCP_AUTH_SERVER = os.environ["MCP_AUTH_SERVER"]
 
+
 async def register_oauth_client(
     taskmanager_url: str,
     session_cookie: str,
@@ -63,12 +64,10 @@ async def register_oauth_client(
         async with session.post(url, json=client_data, headers=headers) as response:
             if response.status == 201:
                 client_info = await response.json()
-                return client_info # type: ignore
+                return client_info  # type: ignore
             else:
                 error_text = await response.text()
-                raise Exception(
-                    f"Failed to register client: {response.status} - {error_text}"
-                )
+                raise Exception(f"Failed to register client: {response.status} - {error_text}")
 
 
 async def list_oauth_clients(taskmanager_url: str, session_cookie: str) -> list[dict[str, Any]]:
@@ -92,28 +91,18 @@ async def list_oauth_clients(taskmanager_url: str, session_cookie: str) -> list[
         async with session.get(url, headers=headers) as response:
             if response.status == 200:
                 clients = await response.json()
-                return clients # type: ignore
+                return clients  # type: ignore
             else:
                 error_text = await response.text()
-                raise Exception(
-                    f"Failed to list clients: {response.status} - {error_text}"
-                )
+                raise Exception(f"Failed to list clients: {response.status} - {error_text}")
 
 
 @click.command()
-@click.option(
-    "--taskmanager-url", default="http://localhost:4321", help="TaskManager base URL"
-)
-@click.option(
-    "--session-cookie", help="Session cookie from TaskManager (required for auth)"
-)
+@click.option("--taskmanager-url", default="http://localhost:4321", help="TaskManager base URL")
+@click.option("--session-cookie", help="Session cookie from TaskManager (required for auth)")
 @click.option("--client-name", default="MCP Server", help="Name for the OAuth client")
-@click.option(
-    "--list-only", is_flag=True, help="Only list existing clients, don't create new one"
-)
-@click.option(
-    "--output-env", is_flag=True, help="Output environment variables for .env file"
-)
+@click.option("--list-only", is_flag=True, help="Only list existing clients, don't create new one")
+@click.option("--output-env", is_flag=True, help="Output environment variables for .env file")
 def main(
     taskmanager_url: str,
     session_cookie: Optional[str],
@@ -165,9 +154,7 @@ def main(
                 return
 
             print(f"🔑 Registering OAuth client '{client_name}'...")
-            client_info = await register_oauth_client(
-                taskmanager_url, session_cookie, client_name
-            )
+            client_info = await register_oauth_client(taskmanager_url, session_cookie, client_name)
 
             print(client_info)
 
@@ -176,9 +163,7 @@ def main(
             print(f"Client ID: {client_info['client_id']}")
             print(f"Client Secret: {client_info['client_secret']}")
             print(f"Name: {client_info['name']}")
-            print(
-                f"Redirect URIs: {json.dumps(client_info['redirect_uris'], indent=2)}"
-            )
+            print(f"Redirect URIs: {json.dumps(client_info['redirect_uris'], indent=2)}")
 
             if output_env:
                 print("\n🔧 Environment Variables (.env file):")

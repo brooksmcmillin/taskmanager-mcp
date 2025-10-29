@@ -25,7 +25,10 @@ from taskmanager_oauth_provider import TaskManagerAuthSettings, TaskManagerOAuth
 load_dotenv()
 logger = logging.getLogger(__name__)
 
-class TaskManagerAuthProvider(TaskManagerOAuthProvider[AuthorizationCodeT, RefreshTokenT, AccessTokenT]):
+
+class TaskManagerAuthProvider(
+    TaskManagerOAuthProvider[AuthorizationCodeT, RefreshTokenT, AccessTokenT]
+):
     """
     Authorization Server provider that integrates with TaskManager OAuth.
 
@@ -99,9 +102,7 @@ def load_registered_clients() -> dict[str, Any]:
                     try:
                         parsed_scopes = json.loads(scopes)
                         scope_string = (
-                            " ".join(parsed_scopes)
-                            if isinstance(parsed_scopes, list)
-                            else scopes
+                            " ".join(parsed_scopes) if isinstance(parsed_scopes, list) else scopes
                         )
                     except json.JSONDecodeError:
                         scope_string = scopes
@@ -111,16 +112,16 @@ def load_registered_clients() -> dict[str, Any]:
                 # Determine auth method based on client name
                 # Clients with "claude-code" in their name are public clients (no secret)
                 client_name = client_data.get("name", "")
-                auth_method = (
-                    "none"
-                    if "claude-code" in client_name
-                    else "client_secret_post"
-                )
+                auth_method = "none" if "claude-code" in client_name else "client_secret_post"
 
                 # Don't set client_secret for public clients
                 client_secret = (
-                    None if auth_method == "none"
-                    else (client_data.get("client_secret") or client_data.get("clientSecret", "dummy-secret"))
+                    None
+                    if auth_method == "none"
+                    else (
+                        client_data.get("client_secret")
+                        or client_data.get("clientSecret", "dummy-secret")
+                    )
                 )
 
                 processed_client = {
@@ -140,8 +141,10 @@ def load_registered_clients() -> dict[str, Any]:
 
     return clients
 
+
 # Load persisted client storage
 registered_clients = {}
+
 
 def create_authorization_server(
     host: str, port: int, server_url: AnyHttpUrl, auth_settings: TaskManagerAuthSettings
@@ -236,7 +239,7 @@ def create_authorization_server(
                             response_data["body"] += message.get("body", b"")
 
                     # Call the endpoint as ASGI app
-                    await original_token_route.app(scope, receive, send) # type: ignore
+                    await original_token_route.app(scope, receive, send)  # type: ignore
 
                     logger.info(f"Token endpoint result: {response_data['status']}")
 
@@ -244,9 +247,7 @@ def create_authorization_server(
                     if response_data["body"]:
                         try:
                             response_text = cast(bytes, response_data["body"]).decode("utf-8")
-                            logger.info(
-                                f"Token endpoint response body: {response_text}"
-                            )
+                            logger.info(f"Token endpoint response body: {response_text}")
                         except:
                             logger.info(
                                 f"Token endpoint response body (raw): {response_data['body']}"
@@ -254,7 +255,7 @@ def create_authorization_server(
 
                     # Convert headers back to dict format for Response
                     headers_dict = {}
-                    for name, value in response_data["headers"]: # type: ignore
+                    for name, value in response_data["headers"]:  # type: ignore
                         headers_dict[name.decode()] = value.decode()
 
                     return Response(
@@ -280,9 +281,7 @@ def create_authorization_server(
         """Handle OAuth callback from TaskManager."""
         return await oauth_provider.handle_oauth_callback(request)
 
-    routes.append(
-        Route("/oauth/callback", endpoint=oauth_callback_handler, methods=["GET"])
-    )
+    routes.append(Route("/oauth/callback", endpoint=oauth_callback_handler, methods=["GET"]))
 
     # Add MCP client callback route
     async def mcp_client_callback_handler(request: Request) -> Response:
@@ -309,7 +308,8 @@ def create_authorization_server(
             )
 
         if code:
-            return HTMLResponse("""
+            return HTMLResponse(
+                """
             <html>
             <body>
                 <h1>Authorization Successful!</h1>
@@ -317,13 +317,12 @@ def create_authorization_server(
                 <script>setTimeout(() => window.close(), 2000);</script>
             </body>
             </html>
-            """)
+            """
+            )
 
         return HTMLResponse("Invalid callback", status_code=400)
 
-    routes.append(
-        Route("/callback", endpoint=mcp_client_callback_handler, methods=["GET"])
-    )
+    routes.append(Route("/callback", endpoint=mcp_client_callback_handler, methods=["GET"]))
 
     # Add token introspection endpoint (RFC 7662) for Resource Servers
     async def introspect_handler(request: Request) -> Response:
@@ -438,9 +437,7 @@ def create_authorization_server(
         assert client_data is not None, "Error: No Client Data"
 
         client_id = client_data.get("client_id") or client_data.get("clientId")
-        client_secret = client_data.get("client_secret") or client_data.get(
-            "clientSecret"
-        )
+        client_secret = client_data.get("client_secret") or client_data.get("clientSecret")
 
         if not client_id or not client_secret:
             logger.error(f"Invalid client data returned from API: {client_data}")
@@ -454,7 +451,9 @@ def create_authorization_server(
 
         # Store in local cache for immediate use
         # Respect the requested auth method (e.g., "none" for public clients like MCP Inspector)
-        requested_auth_method = registration_data.get("token_endpoint_auth_method", "client_secret_post")
+        requested_auth_method = registration_data.get(
+            "token_endpoint_auth_method", "client_secret_post"
+        )
 
         client_info = {
             "client_id": client_id,
@@ -519,28 +518,32 @@ def create_authorization_server(
                 "Access-Control-Allow-Origin": "*",
                 "Access-Control-Allow-Methods": "GET, OPTIONS",
                 "Access-Control-Allow-Headers": "*",
-            }
+            },
         )
 
     # Add OAuth metadata routes - insert at beginning to override MCP defaults
-    routes.insert(0,
+    routes.insert(
+        0,
         Route(
             "/.well-known/oauth-authorization-server",
             endpoint=cors_middleware(oauth_metadata_handler, ["GET", "OPTIONS"]),
             methods=["GET", "OPTIONS"],
-        )
+        ),
     )
 
-    routes.insert(1,
+    routes.insert(
+        1,
         Route(
             "/.well-known/openid-configuration",
             endpoint=cors_middleware(oauth_metadata_handler, ["GET", "OPTIONS"]),
             methods=["GET", "OPTIONS"],
-        )
+        ),
     )
 
     # Add logging middleware
-    async def log_requests(request: Request, call_next: Callable[[Request], Awaitable[Response]]) -> Response:
+    async def log_requests(
+        request: Request, call_next: Callable[[Request], Awaitable[Response]]
+    ) -> Response:
         logger.info("=== Incoming Request to Auth Server ===")
         logger.info(f"Method: {request.method}")
         logger.info(f"URL: {request.url}")
@@ -559,14 +562,16 @@ def create_authorization_server(
     from starlette.middleware.base import BaseHTTPMiddleware
 
     class LoggingMiddleware(BaseHTTPMiddleware):
-        async def dispatch(self, request: Request, call_next: Callable[[Request], Awaitable[Response]]) -> Response:
+        async def dispatch(
+            self, request: Request, call_next: Callable[[Request], Awaitable[Response]]
+        ) -> Response:
             return await log_requests(request, call_next)
 
     return Starlette(routes=routes, middleware=[Middleware(LoggingMiddleware)])
 
 
 async def run_server(
-    host:str, port: int, server_url: AnyHttpUrl, auth_settings: TaskManagerAuthSettings
+    host: str, port: int, server_url: AnyHttpUrl, auth_settings: TaskManagerAuthSettings
 ) -> None:
     """Run the Authorization Server."""
     auth_server = create_authorization_server(host, port, server_url, auth_settings)
@@ -583,20 +588,18 @@ async def run_server(
     server_url_str = str(server_url).rstrip("/")
     server_url = AnyHttpUrl(server_url_str)
 
-    logger.info("="*60)
+    logger.info("=" * 60)
     logger.info(f"🚀 MCP Authorization Server running on {server_url}")
     logger.info(f"📍 Public URL: {server_url}")
     logger.info(f"🔌 Binding to: {host}:{port}")
-    logger.info("="*60)
+    logger.info("=" * 60)
 
     await server.serve()
 
 
 @click.command()
 @click.option("--port", default=9000, help="Port to listen on")
-@click.option(
-    "--taskmanager-url", default="localhost:4321", help="TaskManager base URL"
-)
+@click.option("--taskmanager-url", default="localhost:4321", help="TaskManager base URL")
 @click.option(
     "--server-url",
     help="Auth server URL (for redirect URIs). Defaults to http://localhost:PORT",
@@ -622,9 +625,7 @@ def main(port: int, taskmanager_url: str, server_url: str | None = None) -> int:
     global api_client
     from task_api import create_authenticated_client
 
-    api_client = create_authenticated_client(
-        client_id, client_secret, f"{taskmanager_url}/api"
-    )
+    api_client = create_authenticated_client(client_id, client_secret, f"{taskmanager_url}/api")
 
     if not api_client:
         logger.error("Failed to authenticate with backend API")
