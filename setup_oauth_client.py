@@ -169,7 +169,7 @@ def main(
                 taskmanager_url, session_cookie, client_name
             )
 
-            print(client_info)
+            # Do not print the entire client_info dictionary as it may contain sensitive data.
 
             print("✅ OAuth client registered successfully!")
             print("\n📋 Client Information:")
