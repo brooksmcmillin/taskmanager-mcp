@@ -374,7 +374,9 @@ class TaskManagerOAuthProvider(
 
         logger.info(f"Exchanging token at {token_url}")
         logger.info(f"Using TaskManager client_id: {client_id}")
-        logger.debug("Using redirect_uri for token exchange")  # Avoid logging redirect URI directly, as best practice.
+        logger.debug(
+            "Using redirect_uri for token exchange"
+        )  # Avoid logging redirect URI directly, as best practice.
 
         async with session.post(token_url, data=token_data) as response:
             if response.status != 200:
