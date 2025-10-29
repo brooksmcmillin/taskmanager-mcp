@@ -1,4 +1,57 @@
+# Virtual environments
 .venv/
-__pycache__/ 
+venv/
+env/
 
-.env*
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Environment variables (CRITICAL - never commit these!)
+.env
+.env.*
+!.env.example
+
+# Test coverage
+.coverage
+.coverage.*
+htmlcov/
+.pytest_cache/
+.tox/
+
+# Type checking
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Linting
+.ruff_cache/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Distribution / packaging
+dist/
+build/
+*.egg-info/
+
+# Security scan reports
+bandit-report.json
+pip-audit.json
+safety-report.json
+trivy-*.txt
+security-report.txt
+*.sarif
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
