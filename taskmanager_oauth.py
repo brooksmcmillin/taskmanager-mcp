@@ -17,7 +17,9 @@ class AuthSettings(BaseSettings):
     pass
 
 
-class TaskManagerOAuthProvider(OAuthAuthorizationServerProvider[AuthorizationCodeT, RefreshTokenT, AccessTokenT]):
+class TaskManagerOAuthProvider(
+    OAuthAuthorizationServerProvider[AuthorizationCodeT, RefreshTokenT, AccessTokenT]
+):
     def __init__(self, settings: AuthSettings, auth_callback_url: str, server_url: str):
         self.settings = settings
         self.auth_callback_url = auth_callback_url
@@ -41,14 +43,10 @@ class TaskManagerOAuthProvider(OAuthAuthorizationServerProvider[AuthorizationCod
         self.state_mapping[state] = {
             "redirect_uri": str(params.redirect_uri),
             "code_challenge": params.code_challenge,
-            "redirect_uri_provided_explicitly": str(
-                params.redirect_uri_provided_explicitly
-            ),
+            "redirect_uri_provided_explicitly": str(params.redirect_uri_provided_explicitly),
             "client_id": client.client_id,
             "resource": params.resource,  # RFC 8707
         }
 
-        auth_url = (
-            f"{self.auth_callback_url}?state={state}&client_id={client.client_id}"
-        )
+        auth_url = f"{self.auth_callback_url}?state={state}&client_id={client.client_id}"
         return auth_url

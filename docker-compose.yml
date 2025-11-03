@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   auth-server:
     build: .
@@ -12,6 +10,7 @@ services:
       - TASKMANAGER_CLIENT_SECRET=${TASKMANAGER_CLIENT_SECRET}
       - TASKMANAGER_OAUTH_HOST=${TASKMANAGER_OAUTH_HOST:-localhost:4321}
       - MCP_SERVER=http://resource-server:8001
+      - MCP_AUTH_SERVER_URL={MCP_AUTH_SERVER_PUBLIC_URL}
     env_file:
       - .env
     networks:
@@ -21,13 +20,15 @@ services:
   resource-server:
     build: .
     container_name: taskmanager-resource-server
-    command: python server.py --port 8001 --auth-server http://auth-server:9000
+    command: python server.py --port 8001 --auth-server http://auth-server:9000 --auth-server-public-url $MCP_AUTH_SERVER_PUBLIC_URL
     ports:
       - "8001:8001"
     environment:
       - TASKMANAGER_CLIENT_ID=${TASKMANAGER_CLIENT_ID}
       - TASKMANAGER_CLIENT_SECRET=${TASKMANAGER_CLIENT_SECRET}
       - MCP_AUTH_SERVER=http://auth-server:9000
+      - MCP_SERVER_URL={MCP_SERVER_URL}
+      - MCP_AUTH_SERVER_PUBLIC_URL={MCP_AUTH_SERVER_PUBLIC_URL}
     env_file:
       - .env
     depends_on:
