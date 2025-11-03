@@ -14,7 +14,7 @@ You can get the session cookie from your browser after logging into TaskManager.
 import asyncio
 import os
 import sys
-from typing import Any, Optional
+from typing import Any
 
 import aiohttp
 import click
@@ -28,7 +28,7 @@ async def register_oauth_client(
     taskmanager_url: str,
     session_cookie: str,
     client_name: str = "MCP Server",
-    redirect_uris: Optional[list[str]] = None,
+    redirect_uris: list[str] | None = None,
 ) -> dict[str, Any]:
     """
     Register an OAuth client with TaskManager.
@@ -104,7 +104,7 @@ async def list_oauth_clients(taskmanager_url: str, session_cookie: str) -> list[
 @click.option("--output-env", is_flag=True, help="Output environment variables for .env file")
 def main(
     taskmanager_url: str,
-    session_cookie: Optional[str],
+    session_cookie: str | None,
     client_name: str,
     list_only: bool,
     output_env: bool,
@@ -154,15 +154,7 @@ def main(
             print(f"🔑 Registering OAuth client '{client_name}'...")
             client_info = await register_oauth_client(taskmanager_url, session_cookie, client_name)
 
-            # Do not print the entire client_info dictionary as it may contain sensitive data.
-
-            print(client_info)
-
             print("✅ OAuth client registered successfully!")
-            print("\n📋 Client Information:")
-            print(f"Client ID: {client_info['client_id']}")
-            print(f"Client Secret: {client_info['client_secret']}")
-            print(f"Name: {client_info['name']}")
 
             if output_env:
                 print("\n🔧 Environment Variables (.env file):")

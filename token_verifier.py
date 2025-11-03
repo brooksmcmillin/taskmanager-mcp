@@ -4,8 +4,7 @@ import logging
 from typing import Any
 
 from mcp.server.auth.provider import AccessToken, TokenVerifier
-from mcp.shared.auth_utils import (check_resource_allowed,
-                                   resource_url_from_server_url)
+from mcp.shared.auth_utils import check_resource_allowed, resource_url_from_server_url
 
 logger = logging.getLogger(__name__)
 
@@ -101,10 +100,7 @@ class IntrospectionTokenVerifier(TokenVerifier):
         # Check 'aud' claim first (standard JWT audience)
         aud = token_data.get("aud")
         if isinstance(aud, list):
-            for audience in aud:
-                if self._is_valid_resource(audience):
-                    return True
-            return False
+            return any(self._is_valid_resource(audience) for audience in aud)
         elif aud:
             return self._is_valid_resource(aud)
 

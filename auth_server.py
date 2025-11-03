@@ -4,13 +4,12 @@ import logging
 import os
 import secrets
 import time
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, MutableMapping
 from typing import Any, cast
 
 import click
 from dotenv import load_dotenv
-from mcp.server.auth.provider import (AccessTokenT, AuthorizationCodeT,
-                                      RefreshTokenT)
+from mcp.server.auth.provider import AccessTokenT, AuthorizationCodeT, RefreshTokenT
 from mcp.server.auth.routes import cors_middleware, create_auth_routes
 from mcp.server.auth.settings import AuthSettings, ClientRegistrationOptions
 from pydantic import AnyHttpUrl
@@ -21,8 +20,7 @@ from starlette.routing import Route
 from uvicorn import Config, Server
 
 from task_api import TaskManagerAPI
-from taskmanager_oauth_provider import (TaskManagerAuthSettings,
-                                        TaskManagerOAuthProvider)
+from taskmanager_oauth_provider import TaskManagerAuthSettings, TaskManagerOAuthProvider
 
 load_dotenv()
 logger = logging.getLogger(__name__)
@@ -231,7 +229,7 @@ def create_authorization_server(
                     response_started = False
                     response_data = {"status": 500, "headers": [], "body": b""}
 
-                    async def send(message: dict[str, Any]) -> None:
+                    async def send(message: MutableMapping[str, Any]) -> None:
                         nonlocal response_started, response_data
                         if message["type"] == "http.response.start":
                             response_started = True
@@ -241,7 +239,7 @@ def create_authorization_server(
                             response_data["body"] += message.get("body", b"")
 
                     # Call the endpoint as ASGI app
-                    await original_token_route.app(scope, receive, send)  # type: ignore
+                    await original_token_route.app(scope, receive, send)  # noqa: B023
 
                     logger.info(f"Token endpoint result: {response_data['status']}")
 
@@ -250,7 +248,7 @@ def create_authorization_server(
                         try:
                             response_text = cast(bytes, response_data["body"]).decode("utf-8")
                             logger.info(f"Token endpoint response body: {response_text}")
-                        except:
+                        except Exception:
                             logger.info(
                                 f"Token endpoint response body (raw): {response_data['body']}"
                             )
@@ -292,7 +290,6 @@ def create_authorization_server(
 
         # Extract auth code and state from query params
         code = request.query_params.get("code")
-        state = request.query_params.get("state")
         error = request.query_params.get("error")
 
         if error:
@@ -641,7 +638,7 @@ def main(port: int, taskmanager_url: str, server_url: str | None = None) -> int:
     )
 
     # Bind to 0.0.0.0 for Docker networking
-    host = "0.0.0.0"
+    host = "0.0.0.0"  # noqa: S104
 
     # Use environment variable for public server URL, or default to localhost
     if server_url is None:

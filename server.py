@@ -423,7 +423,7 @@ def main(
         # Configure uvicorn to handle proxy headers properly
         uvicorn.run(
             mcp_server.streamable_http_app,
-            host="0.0.0.0",
+            host="0.0.0.0",  # noqa: S104
             port=port,
             log_level="info",
             proxy_headers=True,

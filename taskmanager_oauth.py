@@ -1,14 +1,12 @@
-"""
-WIP, please ignore
-"""
-
-from typing import Optional
-
-from mcp.server.auth.provider import (AccessToken, AccessTokenT,
-                                      AuthorizationCode, AuthorizationCodeT,
-                                      AuthorizationParams,
-                                      OAuthAuthorizationServerProvider,
-                                      RefreshTokenT)
+from mcp.server.auth.provider import (
+    AccessToken,
+    AccessTokenT,
+    AuthorizationCode,
+    AuthorizationCodeT,
+    AuthorizationParams,
+    OAuthAuthorizationServerProvider,
+    RefreshTokenT,
+)
 from mcp.shared.auth import OAuthClientInformationFull
 from pydantic_settings import BaseSettings
 
@@ -27,9 +25,9 @@ class TaskManagerOAuthProvider(
         self.clients: dict[str, OAuthClientInformationFull] = {}
         self.auth_codes: dict[str, AuthorizationCode] = {}
         self.tokens: dict[str, AccessToken] = {}
-        self.state_mapping: dict[str, dict[str, Optional[str]]] = {}
+        self.state_mapping: dict[str, dict[str, str | None]] = {}
 
-    async def get_client(self, client_id: str) -> Optional[OAuthClientInformationFull]:
+    async def get_client(self, client_id: str) -> OAuthClientInformationFull | None:
         return self.clients.get(client_id)
 
     async def register_client(self, client_info: OAuthClientInformationFull) -> None:

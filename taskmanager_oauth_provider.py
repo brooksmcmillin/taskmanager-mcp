@@ -19,17 +19,22 @@ import logging
 import os
 import secrets
 import time
-from typing import Any, Optional, cast
+from typing import Any, cast
 from urllib.parse import urlencode
 
 import aiohttp
 from dotenv import load_dotenv
-from mcp.server.auth.provider import (AccessToken, AccessTokenT,
-                                      AuthorizationCode, AuthorizationCodeT,
-                                      AuthorizationParams,
-                                      OAuthAuthorizationServerProvider,
-                                      RefreshToken, RefreshTokenT,
-                                      construct_redirect_uri)
+from mcp.server.auth.provider import (
+    AccessToken,
+    AccessTokenT,
+    AuthorizationCode,
+    AuthorizationCodeT,
+    AuthorizationParams,
+    OAuthAuthorizationServerProvider,
+    RefreshToken,
+    RefreshTokenT,
+    construct_redirect_uri,
+)
 from mcp.shared.auth import OAuthClientInformationFull, OAuthToken
 from pydantic import AnyHttpUrl
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -61,15 +66,15 @@ class TaskManagerAuthSettings(BaseSettings):
     clients_endpoint: str = "/api/oauth/clients"
 
     # OAuth client credentials (will be auto-registered if not provided)
-    client_id: Optional[str] = None
-    client_secret: Optional[str] = None
+    client_id: str | None = None
+    client_secret: str | None = None
     client_name: str = "MCP Server"
 
     # MCP-specific settings
     mcp_scope: str = "read"  # Default scope for MCP access
 
     # Session settings for admin operations (if needed)
-    admin_session_cookie: Optional[str] = None  # For auto-registering clients
+    admin_session_cookie: str | None = None  # For auto-registering clients
 
 
 class TaskManagerOAuthProvider(
@@ -109,7 +114,7 @@ class TaskManagerOAuthProvider(
         self.state_mapping: dict[str, dict[str, str | None]] = {}
 
         # HTTP session for making requests to taskmanager
-        self._session: Optional[aiohttp.ClientSession] = None
+        self._session: aiohttp.ClientSession | None = None
 
         logger.info(f"Initialized TaskManager OAuth provider for {settings.base_url}")
 
@@ -331,7 +336,7 @@ class TaskManagerOAuthProvider(
 
         except Exception as e:
             logger.error(f"Error handling OAuth callback: {e}")
-            raise HTTPException(500, "Internal server error during OAuth callback")
+            raise HTTPException(500, "Internal server error during OAuth callback") from e
 
     async def _exchange_code_with_taskmanager(self, code: str, state: str) -> str:
         """
@@ -534,8 +539,8 @@ class TaskManagerOAuthProvider(
 def create_taskmanager_oauth_provider(
     taskmanager_base_url: str = OAUTH_PROVIDER,
     server_url: str = MCP_SERVER,
-    client_id: Optional[str] = None,
-    client_secret: Optional[str] = None,
+    client_id: str | None = None,
+    client_secret: str | None = None,
 ) -> TaskManagerOAuthProvider[AuthorizationCode, RefreshToken, AccessToken]:
     """
     Convenience function to create a TaskManager OAuth provider.

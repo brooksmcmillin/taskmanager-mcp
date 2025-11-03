@@ -1,6 +1,7 @@
 import os
 from dataclasses import dataclass
-from typing import Any, Optional
+from json import JSONDecodeError
+from typing import Any
 
 import requests
 from dotenv import load_dotenv
@@ -13,16 +14,16 @@ CLIENT_SECRET = ""
 @dataclass
 class ApiResponse:
     success: bool
-    data: Optional[Any] = None
-    error: Optional[str] = None
-    status_code: Optional[int] = None
+    data: Any | None = None
+    error: str | None = None
+    status_code: int | None = None
 
 
 class TaskManagerAPI:
     def __init__(
         self,
         base_url: str = "http://localhost:4321/api",
-        session: Optional[requests.Session] = None,
+        session: requests.Session | None = None,
     ):
         self.base_url = base_url.rstrip("/")
         self.session = session or requests.Session()
@@ -64,7 +65,7 @@ class TaskManagerAPI:
                 try:
                     error_data = response.json()
                     error_message = error_data.get("error", f"HTTP {response.status_code}")
-                except:
+                except JSONDecodeError:
                     error_message = f"HTTP {response.status_code}: {response.text}"
 
                 return ApiResponse(
@@ -73,7 +74,7 @@ class TaskManagerAPI:
 
             try:
                 json_data = response.json()
-            except:
+            except JSONDecodeError:
                 json_data = None
 
             return ApiResponse(success=True, data=json_data, status_code=response.status_code)
@@ -100,9 +101,7 @@ class TaskManagerAPI:
     def get_projects(self) -> ApiResponse:
         return self._make_request("GET", "/projects")
 
-    def create_project(
-        self, name: str, color: str, description: Optional[str] = None
-    ) -> ApiResponse:
+    def create_project(self, name: str, color: str, description: str | None = None) -> ApiResponse:
         data = {"name": name, "color": color}
         if description is not None:
             data["description"] = description
@@ -114,9 +113,9 @@ class TaskManagerAPI:
     def update_project(
         self,
         project_id: int,
-        name: Optional[str] = None,
-        color: Optional[str] = None,
-        description: Optional[str] = None,
+        name: str | None = None,
+        color: str | None = None,
+        description: str | None = None,
     ) -> ApiResponse:
         data = {}
         if name is not None:
@@ -129,9 +128,9 @@ class TaskManagerAPI:
 
     def get_todos(
         self,
-        project_id: Optional[int] = None,
-        status: Optional[str] = None,
-        time_horizon: Optional[str] = None,
+        project_id: int | None = None,
+        status: str | None = None,
+        time_horizon: str | None = None,
     ) -> ApiResponse:
         params: dict[str, Any] = {}
         if project_id is not None:
@@ -145,14 +144,14 @@ class TaskManagerAPI:
     def create_todo(
         self,
         title: str,
-        project_id: Optional[int] = None,
-        description: Optional[str] = None,
+        project_id: int | None = None,
+        description: str | None = None,
         priority: str = "medium",
         estimated_hours: float = 1.0,
-        due_date: Optional[str] = None,
-        tags: Optional[list[str]] = None,
+        due_date: str | None = None,
+        tags: list[str] | None = None,
         context: str = "work",
-        time_horizon: Optional[str] = None,
+        time_horizon: str | None = None,
     ) -> ApiResponse:
         data = {
             "title": title,
@@ -178,16 +177,16 @@ class TaskManagerAPI:
     def update_todo(
         self,
         todo_id: int,
-        title: Optional[str] = None,
-        project_id: Optional[int] = None,
-        description: Optional[str] = None,
-        priority: Optional[str] = None,
-        estimated_hours: Optional[float] = None,
-        status: Optional[str] = None,
-        due_date: Optional[str] = None,
-        tags: Optional[list[str]] = None,
-        context: Optional[str] = None,
-        time_horizon: Optional[str] = None,
+        title: str | None = None,
+        project_id: int | None = None,
+        description: str | None = None,
+        priority: str | None = None,
+        estimated_hours: float | None = None,
+        status: str | None = None,
+        due_date: str | None = None,
+        tags: list[str] | None = None,
+        context: str | None = None,
+        time_horizon: str | None = None,
     ) -> ApiResponse:
         data: dict[str, Any] = {}
         if title is not None:
@@ -227,7 +226,7 @@ class TaskManagerAPI:
         start_date: str,
         end_date: str,
         status: str = "pending",
-        time_horizon: Optional[str] = None,
+        time_horizon: str | None = None,
     ) -> ApiResponse:
         params = {"start_date": start_date, "end_date": end_date, "status": status}
         if time_horizon is not None:
@@ -241,8 +240,8 @@ class TaskManagerAPI:
         self,
         name: str,
         redirect_uris: list[str],
-        grant_types: Optional[list[str]] = None,
-        scopes: Optional[list[str]] = None,
+        grant_types: list[str] | None = None,
+        scopes: list[str] | None = None,
     ) -> ApiResponse:
         data = {"name": name, "redirectUris": redirect_uris}
         if grant_types is not None:
@@ -266,14 +265,14 @@ class TaskManagerAPI:
                 error_message = error_data.get(
                     "error_description", error_data.get("error", f"HTTP {response.status_code}")
                 )
-            except:
+            except JSONDecodeError:
                 error_message = f"HTTP {response.status_code}: {response.text}"
 
             return ApiResponse(success=False, error=error_message, status_code=response.status_code)
 
         try:
             json_data = response.json()
-        except:
+        except JSONDecodeError:
             json_data = None
 
         return ApiResponse(success=True, data=json_data, status_code=response.status_code)
@@ -281,7 +280,7 @@ class TaskManagerAPI:
 
 def create_authenticated_client(
     username: str, password: str, base_url: str = "http://localhost:4321/api"
-) -> Optional[TaskManagerAPI]:
+) -> TaskManagerAPI | None:
     client = TaskManagerAPI(base_url)
     response = client.login(username, password)
 
