@@ -4,15 +4,11 @@ WIP, please ignore
 
 from typing import Optional
 
-from mcp.server.auth.provider import (
-    AccessToken,
-    AccessTokenT,
-    AuthorizationCode,
-    AuthorizationCodeT,
-    AuthorizationParams,
-    OAuthAuthorizationServerProvider,
-    RefreshTokenT,
-)
+from mcp.server.auth.provider import (AccessToken, AccessTokenT,
+                                      AuthorizationCode, AuthorizationCodeT,
+                                      AuthorizationParams,
+                                      OAuthAuthorizationServerProvider,
+                                      RefreshTokenT)
 from mcp.shared.auth import OAuthClientInformationFull
 from pydantic_settings import BaseSettings
 

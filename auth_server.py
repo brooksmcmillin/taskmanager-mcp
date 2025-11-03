@@ -8,7 +8,8 @@ from typing import Any, cast
 
 import click
 from dotenv import load_dotenv
-from mcp.server.auth.provider import AccessTokenT, AuthorizationCodeT, RefreshTokenT
+from mcp.server.auth.provider import (AccessTokenT, AuthorizationCodeT,
+                                      RefreshTokenT)
 from mcp.server.auth.routes import cors_middleware, create_auth_routes
 from mcp.server.auth.settings import AuthSettings, ClientRegistrationOptions
 from pydantic import AnyHttpUrl
@@ -19,7 +20,8 @@ from starlette.routing import Route
 from uvicorn import Config, Server
 
 from task_api import TaskManagerAPI
-from taskmanager_oauth_provider import TaskManagerAuthSettings, TaskManagerOAuthProvider
+from taskmanager_oauth_provider import (TaskManagerAuthSettings,
+                                        TaskManagerOAuthProvider)
 
 load_dotenv()
 logger = logging.getLogger(__name__)

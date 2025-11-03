@@ -19,22 +19,17 @@ import logging
 import os
 import secrets
 import time
-from dotenv import load_dotenv
 from typing import Any, Optional, cast
 from urllib.parse import urlencode
 
 import aiohttp
-from mcp.server.auth.provider import (
-    AccessToken,
-    AccessTokenT,
-    AuthorizationCode,
-    AuthorizationCodeT,
-    AuthorizationParams,
-    OAuthAuthorizationServerProvider,
-    RefreshToken,
-    RefreshTokenT,
-    construct_redirect_uri,
-)
+from dotenv import load_dotenv
+from mcp.server.auth.provider import (AccessToken, AccessTokenT,
+                                      AuthorizationCode, AuthorizationCodeT,
+                                      AuthorizationParams,
+                                      OAuthAuthorizationServerProvider,
+                                      RefreshToken, RefreshTokenT,
+                                      construct_redirect_uri)
 from mcp.shared.auth import OAuthClientInformationFull, OAuthToken
 from pydantic import AnyHttpUrl
 from pydantic_settings import BaseSettings, SettingsConfigDict

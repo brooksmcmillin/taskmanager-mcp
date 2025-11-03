@@ -12,13 +12,12 @@ You can get the session cookie from your browser after logging into TaskManager.
 """
 
 import asyncio
-import json
+import os
 import sys
 from typing import Any, Optional
 
 import aiohttp
 import click
-import os
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -159,7 +158,6 @@ def main(
                     for i, client in enumerate(clients, 1):
                         print(f"\n{i}. {client.get('name', 'Unnamed')}")
                         print(f"   Client ID: {client.get('client_id', 'N/A')}")
-                        print(f"   Redirect URIs: {client.get('redirect_uris', 'N/A')}")
                         print(f"   Scopes: {client.get('scopes', 'N/A')}")
                         print(f"   Active: {client.get('is_active', 'N/A')}")
                 return
@@ -176,9 +174,6 @@ def main(
             print(f"Client ID: {client_info['client_id']}")
             print(f"Client Secret: {client_info['client_secret']}")
             print(f"Name: {client_info['name']}")
-            print(
-                f"Redirect URIs: {json.dumps(client_info['redirect_uris'], indent=2)}"
-            )
 
             if output_env:
                 print("\n🔧 Environment Variables (.env file):")
