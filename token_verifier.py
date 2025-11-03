@@ -36,8 +36,9 @@ class IntrospectionTokenVerifier(TokenVerifier):
         import httpx
 
         # Validate URL to prevent SSRF attacks
+        # Allow HTTPS, localhost, or Docker internal hostnames
         if not self.introspection_endpoint.startswith(
-            ("https://", "http://localhost", "http://127.0.0.1")
+            ("https://", "http://localhost", "http://127.0.0.1", "http://auth-server:")
         ):
             logger.warning(
                 f"Rejecting introspection endpoint with unsafe scheme: {self.introspection_endpoint}"
@@ -48,13 +49,15 @@ class IntrospectionTokenVerifier(TokenVerifier):
         timeout = httpx.Timeout(10.0, connect=5.0)
         limits = httpx.Limits(max_connections=10, max_keepalive_connections=5)
 
+        # Only verify SSL for HTTPS URLs
+        verify_ssl = self.introspection_endpoint.startswith("https://")
+
         async with httpx.AsyncClient(
             timeout=timeout,
             limits=limits,
-            verify=True,  # Enforce SSL verification
+            verify=verify_ssl,  # Enforce SSL verification for HTTPS only
         ) as client:
             try:
-                print(f"Connectiong to {self.introspection_endpoint}")
                 response = await client.post(
                     self.introspection_endpoint,
                     data={"token": token},
@@ -62,15 +65,12 @@ class IntrospectionTokenVerifier(TokenVerifier):
                 )
 
                 if response.status_code != 200:
-                    logger.debug(
-                        f"Token introspection returned status {response.status_code}"
-                    )
+                    logger.debug(f"Token introspection returned status {response.status_code}")
                     return None
 
                 data = response.json()
-                print(f"DEBUG: Introspection response: {data}")
                 if not data.get("active", False):
-                    print("DEBUG: Token marked as inactive")
+                    logger.debug("Token marked as inactive")
                     return None
 
                 # RFC 8707 resource validation (only when --oauth-strict is set)
@@ -87,7 +87,6 @@ class IntrospectionTokenVerifier(TokenVerifier):
                     expires_at=data.get("exp"),
                     resource=data.get("aud"),  # Include resource in token
                 )
-                print(f"DEBUG: Created AccessToken: {access_token}")
                 return access_token
             except Exception as e:
                 logger.warning(f"Token introspection failed: {e}")
@@ -95,17 +94,13 @@ class IntrospectionTokenVerifier(TokenVerifier):
 
     def _validate_resource(self, token_data: dict[str, Any]) -> bool:
         """Validate token was issued for this resource server."""
-        print("Validating Resource")
         if not self.server_url or not self.resource_url:
             return False  # Fail if strict validation requested but URLs missing
 
         # Check 'aud' claim first (standard JWT audience)
         aud = token_data.get("aud")
         if isinstance(aud, list):
-            for audience in aud:
-                if self._is_valid_resource(audience):
-                    return True
-            return False
+            return any(self._is_valid_resource(audience) for audience in aud)
         elif aud:
             return self._is_valid_resource(aud)
 
@@ -114,7 +109,6 @@ class IntrospectionTokenVerifier(TokenVerifier):
 
     def _is_valid_resource(self, resource: str) -> bool:
         """Check if resource matches this server using hierarchical matching."""
-        print("Checking if valid resource")
         if not self.resource_url:
             return False
 
