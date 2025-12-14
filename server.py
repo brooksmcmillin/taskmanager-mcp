@@ -43,7 +43,6 @@ def get_api_client() -> TaskManagerAPI:
     Returns:
         TaskManagerAPI: Authenticated API client
     """
-    logger.debug(f"TaskManager URL: {TASKMANAGER_URL}")
 
     # Use the public TaskManager URL for API calls
     task_manager = TaskManagerAPI(base_url=f"{TASKMANAGER_URL}/api")

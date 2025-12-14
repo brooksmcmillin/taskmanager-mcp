@@ -28,7 +28,6 @@ class TestTaskManagerAPI:
         api = TaskManagerAPI()
         assert api.base_url == "http://localhost:4321/api"
         assert api.session is not None
-        assert api.cookies == {}
 
     def test_init_custom_url(self):
         api = TaskManagerAPI("https://api.example.com/")
@@ -47,21 +46,22 @@ class TestTaskManagerAPI:
         mock_response.status_code = 200
         mock_response.json.return_value = {"result": "success"}
         mock_response.headers = {}
+        mock_response.history = []
         mock_session.get.return_value = mock_response
+        mock_session.cookies.get_dict.return_value = {}
         mock_session_class.return_value = mock_session
 
         api = TaskManagerAPI()
         api.session = mock_session
         
         result = api._make_request('GET', '/test', params={'param': 'value'})
-        
+
         assert result.success is True
         assert result.data == {"result": "success"}
         assert result.status_code == 200
         mock_session.get.assert_called_once_with(
-            'http://localhost:4321/api/test', 
-            params={'param': 'value'}, 
-            cookies={}
+            'http://localhost:4321/api/test',
+            params={'param': 'value'}
         )
 
     @patch('task_api.requests.Session')
@@ -71,22 +71,23 @@ class TestTaskManagerAPI:
         mock_response.status_code = 201
         mock_response.json.return_value = {"id": 123}
         mock_response.headers = {}
+        mock_response.history = []
         mock_session.post.return_value = mock_response
+        mock_session.cookies.get_dict.return_value = {}
         mock_session_class.return_value = mock_session
 
         api = TaskManagerAPI()
         api.session = mock_session
         
         result = api._make_request('POST', '/test', data={'name': 'test'})
-        
+
         assert result.success is True
         assert result.data == {"id": 123}
         assert result.status_code == 201
         mock_session.post.assert_called_once_with(
-            'http://localhost:4321/api/test', 
-            json={'name': 'test'}, 
-            params=None, 
-            cookies={}
+            'http://localhost:4321/api/test',
+            json={'name': 'test'},
+            params=None
         )
 
     @patch('task_api.requests.Session')
@@ -96,7 +97,9 @@ class TestTaskManagerAPI:
         mock_response.status_code = 404
         mock_response.json.return_value = {"error": "Not found"}
         mock_response.headers = {}
+        mock_response.history = []
         mock_session.get.return_value = mock_response
+        mock_session.cookies.get_dict.return_value = {}
         mock_session_class.return_value = mock_session
 
         api = TaskManagerAPI()
@@ -128,17 +131,20 @@ class TestTaskManagerAPI:
         mock_response = Mock()
         mock_response.status_code = 200
         mock_response.json.return_value = {"success": True}
-        mock_response.headers = {"set-cookie": "session_id=abc123"}
+        mock_response.headers = {}
+        mock_response.history = []
         mock_session.get.return_value = mock_response
+        mock_session.cookies.get_dict.return_value = {}
         mock_session_class.return_value = mock_session
 
         api = TaskManagerAPI()
         api.session = mock_session
-        
+
         result = api._make_request('GET', '/test')
-        
+
         assert result.success is True
-        assert api.cookies["session_id"] == "abc123"
+        # Session handles cookies automatically - just verify the request was made
+        mock_session.get.assert_called_once()
 
     def test_unsupported_method(self):
         api = TaskManagerAPI()

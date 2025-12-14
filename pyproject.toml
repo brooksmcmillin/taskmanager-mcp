@@ -4,8 +4,19 @@ version = "0.1.0"
 description = "OAuth-protected MCP server for TaskManager"
 readme = "README.md"
 requires-python = ">=3.13"
-dependencies = [
-    "isort>=7.0.0",
+dependencies = []
+
+[project.optional-dependencies]
+dev = [
+    "black>=24.0.0",
+    "isort>=5.13.0",
+    "mypy>=1.8.0",
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.0",
+    "pytest-cov>=4.1.0",
+    "pytest-mock>=3.12.0",
+    "ruff>=0.2.0",
+    "types-requests>=2.31.0",
 ]
 
 [tool.black]
@@ -108,7 +119,9 @@ python_classes = "Test*"
 python_functions = "test_*"
 addopts = "-v --tb=short --strict-markers"
 asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
 markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
     "integration: marks tests as integration tests",
+    "asyncio: marks tests as async (run with pytest-asyncio)",
 ]

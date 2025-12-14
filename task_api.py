@@ -43,8 +43,6 @@ class TaskManagerAPI:
     ) -> ApiResponse:
         url = f"{self.base_url}{endpoint}"
 
-        logger.debug(f"Making {method} request to {url}")
-
         try:
             if method.upper() == "GET":
                 response = self.session.get(url, params=params)
