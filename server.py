@@ -20,9 +20,17 @@ logger = logging.getLogger(__name__)
 DEFAULT_SCOPE = ["read"]
 
 load_dotenv()
+# OAuth client credentials (for MCP OAuth flow)
 CLIENT_ID = os.environ["TASKMANAGER_CLIENT_ID"]
 CLIENT_SECRET = os.environ["TASKMANAGER_CLIENT_SECRET"]
 MCP_AUTH_SERVER = os.environ["MCP_AUTH_SERVER"]
+
+# TaskManager API URL
+TASKMANAGER_URL = os.environ.get("TASKMANAGER_OAUTH_HOST", "http://localhost:4321")
+
+# User credentials for API access
+USERNAME = os.environ.get("TASKMANAGER_USERNAME", CLIENT_ID)
+PASSWORD = os.environ.get("TASKMANAGER_PASSWORD", CLIENT_SECRET)
 
 
 def get_api_client() -> TaskManagerAPI:
@@ -35,10 +43,18 @@ def get_api_client() -> TaskManagerAPI:
     Returns:
         TaskManagerAPI: Authenticated API client
     """
-    task_manager = TaskManagerAPI()
-    # For now, use the server credentials
-    # TODO: Implement user-specific authentication
-    task_manager.login(CLIENT_ID, CLIENT_SECRET)
+    logger.debug(f"Creating API client with username: {USERNAME}")
+    logger.debug(f"TaskManager URL: {TASKMANAGER_URL}")
+
+    # Use the public TaskManager URL for API calls
+    task_manager = TaskManagerAPI(base_url=f"{TASKMANAGER_URL}/api")
+
+    # Use username/password for API authentication
+    response = task_manager.login(USERNAME, PASSWORD)
+    if not response.success:
+        logger.error(f"Failed to authenticate with TaskManager API: {response.error}")
+        raise Exception(f"API authentication failed: {response.error}")
+    logger.debug("Successfully authenticated with TaskManager API")
     return task_manager
 
 
@@ -283,10 +299,31 @@ def create_resource_server(
         Returns:
             JSON string containing list of project objects with fields like id, name, description, created_at, etc.
         """
-        projects = get_api_client().get_projects().data
-        if projects is None:
-            return ""
-        return json.dumps(projects)
+        logger.info("=== get_all_projects called ===")
+        try:
+            api_client = get_api_client()
+            logger.debug("API client created successfully")
+
+            response = api_client.get_projects()
+            logger.info(f"get_projects response: success={response.success}, status={response.status_code}")
+
+            if not response.success:
+                logger.error(f"Failed to get projects: {response.error}")
+                return json.dumps({"error": response.error})
+
+            projects = response.data
+            logger.info(f"Retrieved {len(projects) if projects else 0} projects")
+
+            if projects is None:
+                logger.warning("Projects data is None")
+                return json.dumps([])
+
+            result = json.dumps(projects)
+            logger.debug(f"Returning projects JSON: {result[:200]}...")
+            return result
+        except Exception as e:
+            logger.error(f"Exception in get_all_projects: {e}", exc_info=True)
+            return json.dumps({"error": str(e)})
 
     @app.tool()
     async def get_all_tasks() -> str:
@@ -299,13 +336,33 @@ def create_resource_server(
 
         Returns:
             JSON string containing list of task objects with fields like id, title, description, status,
-
             priority, project_id, due_date, created_at, etc.
         """
-        tasks = get_api_client().get_todos().data
-        if tasks is None:
-            return ""
-        return json.dumps(tasks)
+        logger.info("=== get_all_tasks called ===")
+        try:
+            api_client = get_api_client()
+            logger.debug("API client created successfully")
+
+            response = api_client.get_todos()
+            logger.info(f"get_todos response: success={response.success}, status={response.status_code}")
+
+            if not response.success:
+                logger.error(f"Failed to get tasks: {response.error}")
+                return json.dumps({"error": response.error})
+
+            tasks = response.data
+            logger.info(f"Retrieved {len(tasks) if tasks else 0} tasks")
+
+            if tasks is None:
+                logger.warning("Tasks data is None")
+                return json.dumps([])
+
+            result = json.dumps(tasks)
+            logger.debug(f"Returning tasks JSON: {result[:200]}...")
+            return result
+        except Exception as e:
+            logger.error(f"Exception in get_all_tasks: {e}", exc_info=True)
+            return json.dumps({"error": str(e)})
 
     @app.tool()
     async def create_task(
@@ -332,14 +389,37 @@ def create_resource_server(
         Returns:
             The created task object with generated ID and other metadata
         """
-        response = get_api_client().create_todo(
-            title=title,
-            project_id=project_id,
-            description=description,
-            priority=priority,
-            due_date=due_date,
-        )
-        return json.dumps(response.data)
+        logger.info(f"=== create_task called: title='{title}', project_id={project_id} ===")
+        try:
+            api_client = get_api_client()
+            logger.debug("API client created successfully")
+
+            response = api_client.create_todo(
+                title=title,
+                project_id=project_id,
+                description=description,
+                priority=priority,
+                due_date=due_date,
+            )
+            logger.info(f"create_todo response: success={response.success}, status={response.status_code}")
+
+            if not response.success:
+                logger.error(f"Failed to create task: {response.error}")
+                return json.dumps({"error": response.error})
+
+            task = response.data
+            logger.info(f"Created task: {task}")
+
+            if task is None:
+                logger.warning("Task data is None")
+                return json.dumps({"error": "No data returned from create_todo"})
+
+            result = json.dumps(task)
+            logger.debug(f"Returning task JSON: {result}")
+            return result
+        except Exception as e:
+            logger.error(f"Exception in create_task: {e}", exc_info=True)
+            return json.dumps({"error": str(e)})
 
     return app
 
@@ -384,7 +464,10 @@ def main(
         Exit code (0 for success, 1 for error)
     """
 
-    logging.basicConfig(level=logging.INFO)
+    logging.basicConfig(
+        level=logging.DEBUG,
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    )
 
     try:
         # If no server specified, use environment variable or default
