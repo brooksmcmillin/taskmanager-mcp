@@ -288,7 +288,7 @@ def create_authenticated_client(
     username: str, password: str, base_url: str = "http://localhost:4321/api"
 ) -> TaskManagerAPI | None:
     logger.info(f"Attempting to authenticate with backend at {base_url}")
-    logger.debug(f"Username: {username}")
+    # Username is potentially sensitive; do not log in clear text.
 
     client = TaskManagerAPI(base_url)
     response = client.login(username, password)
