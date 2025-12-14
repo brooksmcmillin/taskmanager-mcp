@@ -43,7 +43,6 @@ def get_api_client() -> TaskManagerAPI:
     Returns:
         TaskManagerAPI: Authenticated API client
     """
-    logger.debug(f"Creating API client with username: {USERNAME}")
     logger.debug(f"TaskManager URL: {TASKMANAGER_URL}")
 
     # Use the public TaskManager URL for API calls
@@ -305,7 +304,9 @@ def create_resource_server(
             logger.debug("API client created successfully")
 
             response = api_client.get_projects()
-            logger.info(f"get_projects response: success={response.success}, status={response.status_code}")
+            logger.info(
+                f"get_projects response: success={response.success}, status={response.status_code}"
+            )
 
             if not response.success:
                 logger.error(f"Failed to get projects: {response.error}")
@@ -344,7 +345,9 @@ def create_resource_server(
             logger.debug("API client created successfully")
 
             response = api_client.get_todos()
-            logger.info(f"get_todos response: success={response.success}, status={response.status_code}")
+            logger.info(
+                f"get_todos response: success={response.success}, status={response.status_code}"
+            )
 
             if not response.success:
                 logger.error(f"Failed to get tasks: {response.error}")
@@ -401,7 +404,9 @@ def create_resource_server(
                 priority=priority,
                 due_date=due_date,
             )
-            logger.info(f"create_todo response: success={response.success}, status={response.status_code}")
+            logger.info(
+                f"create_todo response: success={response.success}, status={response.status_code}"
+            )
 
             if not response.success:
                 logger.error(f"Failed to create task: {response.error}")
@@ -465,8 +470,7 @@ def main(
     """
 
     logging.basicConfig(
-        level=logging.DEBUG,
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+        level=logging.DEBUG, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
     )
 
     try:

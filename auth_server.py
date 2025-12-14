@@ -440,7 +440,9 @@ def create_authorization_server(
         client_data = api_response.data
         if client_data is None:
             logger.error("No client data returned from API - got None")
-            logger.error(f"Full API response: success={api_response.success}, status={api_response.status_code}, error={api_response.error}")
+            logger.error(
+                f"Full API response: success={api_response.success}, status={api_response.status_code}, error={api_response.error}"
+            )
             return JSONResponse(
                 {
                     "error": "server_error",
@@ -682,8 +684,6 @@ def main(port: int, taskmanager_url: str, server_url: str | None = None) -> int:
     """
 
     logger.info(f"TaskManager URL: {taskmanager_url}")
-    logger.info(f"Using OAuth client ID: {oauth_client_id}")
-    logger.info(f"API authentication user: {username}")
 
     asyncio.run(run_server(host, port, AnyHttpUrl(server_url), auth_settings))
     return 0

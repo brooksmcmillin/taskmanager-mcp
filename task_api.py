@@ -44,7 +44,6 @@ class TaskManagerAPI:
         url = f"{self.base_url}{endpoint}"
 
         logger.debug(f"Making {method} request to {url}")
-        logger.debug(f"Session cookies before request: {self.session.cookies.get_dict()}")
 
         try:
             if method.upper() == "GET":
@@ -63,7 +62,9 @@ class TaskManagerAPI:
 
             # Log if we got redirected (which would indicate auth failure)
             if response.history:
-                logger.warning(f"Request was redirected: {[r.status_code for r in response.history]} -> {response.status_code}")
+                logger.warning(
+                    f"Request was redirected: {[r.status_code for r in response.history]} -> {response.status_code}"
+                )
                 logger.warning(f"Final URL: {response.url}")
 
             if response.status_code >= 400:
