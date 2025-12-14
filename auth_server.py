@@ -421,6 +421,11 @@ def create_authorization_server(
             scopes=[auth_settings.mcp_scope],
         )
 
+        logger.info(f"API response status: {api_response.success}")
+        logger.info(f"API response status_code: {api_response.status_code}")
+        logger.info(f"API response data: {api_response.data}")
+        logger.info(f"API response error: {api_response.error}")
+
         if not api_response.success:
             logger.error(f"Failed to create OAuth client: {api_response.error}")
             return JSONResponse(
@@ -433,7 +438,18 @@ def create_authorization_server(
 
         # Extract client credentials from API response
         client_data = api_response.data
-        assert client_data is not None, "Error: No Client Data"
+        if client_data is None:
+            logger.error("No client data returned from API - got None")
+            logger.error(
+                f"Full API response: success={api_response.success}, status={api_response.status_code}, error={api_response.error}"
+            )
+            return JSONResponse(
+                {
+                    "error": "server_error",
+                    "error_description": "No client data returned from backend",
+                },
+                status_code=500,
+            )
 
         client_id = client_data.get("client_id") or client_data.get("clientId")
         client_secret = client_data.get("client_secret") or client_data.get("clientSecret")
@@ -617,24 +633,39 @@ def main(port: int, taskmanager_url: str, server_url: str | None = None) -> int:
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     )
 
-    client_id = os.environ["TASKMANAGER_CLIENT_ID"]
-    client_secret = os.environ["TASKMANAGER_CLIENT_SECRET"]
+    # Get OAuth client credentials for OAuth flow
+    oauth_client_id = os.environ["TASKMANAGER_CLIENT_ID"]
+    oauth_client_secret = os.environ["TASKMANAGER_CLIENT_SECRET"]
+
+    # Get user credentials for API access
+    username = os.environ.get("TASKMANAGER_USERNAME", oauth_client_id)
+    password = os.environ.get("TASKMANAGER_PASSWORD", oauth_client_secret)
 
     # Initialize API client for backend database operations
     global api_client
     from task_api import create_authenticated_client
 
-    api_client = create_authenticated_client(client_id, client_secret, f"{taskmanager_url}/api")
+    api_client = create_authenticated_client(username, password, f"{taskmanager_url}/api")
 
     if not api_client:
         logger.error("Failed to authenticate with backend API")
         return 1
 
-    # Load TaskManager auth settings
+    # Verify the API client can make authenticated requests
+    # We'll verify by trying to load OAuth clients (which requires auth)
+    logger.info("Verifying API client authentication...")
+    test_response = api_client.get_oauth_clients()
+    if test_response.success:
+        logger.info("API client authenticated successfully - able to access protected endpoints")
+    else:
+        logger.warning(f"API client authentication verification failed: {test_response.error}")
+        logger.warning("Will attempt to continue, but authentication may not work properly")
+
+    # Load TaskManager auth settings with OAuth client credentials
     auth_settings = TaskManagerAuthSettings(
         base_url=taskmanager_url,
-        client_id=client_id,
-        client_secret=client_secret,
+        client_id=oauth_client_id,
+        client_secret=oauth_client_secret,
     )
 
     # Bind to 0.0.0.0 for Docker networking
@@ -653,12 +684,6 @@ def main(port: int, taskmanager_url: str, server_url: str | None = None) -> int:
     """
 
     logger.info(f"TaskManager URL: {taskmanager_url}")
-    if client_id:
-        logger.info(f"Using OAuth client ID: {client_id}")
-    else:
-        logger.warning(
-            "No client ID provided - you'll need to register an OAuth client in TaskManager"
-        )
 
     asyncio.run(run_server(host, port, AnyHttpUrl(server_url), auth_settings))
     return 0

@@ -1,3 +1,4 @@
+import logging
 import os
 from dataclasses import dataclass
 from json import JSONDecodeError
@@ -9,6 +10,8 @@ from dotenv import load_dotenv
 load_dotenv()
 CLIENT_ID = ""
 CLIENT_SECRET = ""
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -30,7 +33,6 @@ class TaskManagerAPI:
         self.session.headers.update(
             {"Content-Type": "application/json", "Accept": "application/json"}
         )
-        self.cookies: dict[str, Any] = {}
 
     def _make_request(
         self,
@@ -43,23 +45,25 @@ class TaskManagerAPI:
 
         try:
             if method.upper() == "GET":
-                response = self.session.get(url, params=params, cookies=self.cookies)
+                response = self.session.get(url, params=params)
             elif method.upper() == "POST":
-                response = self.session.post(url, json=data, params=params, cookies=self.cookies)
+                response = self.session.post(url, json=data, params=params)
             elif method.upper() == "PUT":
-                response = self.session.put(url, json=data, params=params, cookies=self.cookies)
+                response = self.session.put(url, json=data, params=params)
             elif method.upper() == "DELETE":
-                response = self.session.delete(url, params=params, cookies=self.cookies)
+                response = self.session.delete(url, params=params)
             else:
                 return ApiResponse(success=False, error=f"Unsupported HTTP method: {method}")
 
-            # print(f"Response ({response.status_code}): {response.text}")
-            # print(response.headers)
-            # If we get a set-cookie header, set it
-            # TODO: better auth
-            if "set-cookie" in response.headers:
-                split_cookie = response.headers["set-cookie"].split("=")
-                self.cookies[split_cookie[0]] = split_cookie[1]
+            logger.debug(f"Response status: {response.status_code}")
+            logger.debug(f"Session cookies after request: {self.session.cookies.get_dict()}")
+
+            # Log if we got redirected (which would indicate auth failure)
+            if response.history:
+                logger.warning(
+                    f"Request was redirected: {[r.status_code for r in response.history]} -> {response.status_code}"
+                )
+                logger.warning(f"Final URL: {response.url}")
 
             if response.status_code >= 400:
                 try:
@@ -281,12 +285,18 @@ class TaskManagerAPI:
 def create_authenticated_client(
     username: str, password: str, base_url: str = "http://localhost:4321/api"
 ) -> TaskManagerAPI | None:
+    logger.info(f"Attempting to authenticate with backend at {base_url}")
+    # Username is potentially sensitive; do not log in clear text.
+
     client = TaskManagerAPI(base_url)
     response = client.login(username, password)
 
     if response.success:
+        logger.info("Authentication successful")
+        logger.debug(f"Session cookies after login: {client.session.cookies.get_dict()}")
         return client
     else:
+        logger.error(f"Authentication failed: {response.error}")
         print(f"Authentication failed: {response.error}")
         return None
 
