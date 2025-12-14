@@ -682,7 +682,7 @@ def main(port: int, taskmanager_url: str, server_url: str | None = None) -> int:
     """
 
     logger.info(f"TaskManager URL: {taskmanager_url}")
-    logger.info(f"Using OAuth client ID: {oauth_client_id}")
+    logger.info("Using OAuth client ID: (redacted)")
     logger.info(f"API authentication user: {username}")
 
     asyncio.run(run_server(host, port, AnyHttpUrl(server_url), auth_settings))
