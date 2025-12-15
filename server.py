@@ -287,63 +287,57 @@ def create_resource_server(
         }
 
     @app.tool()
-    async def get_all_projects() -> str:
+    async def get_tasks(
+        status: str | None = None,
+        start_date: str | None = None,
+        end_date: str | None = None,
+        category: str | None = None,
+        limit: int | None = None,
+    ) -> str:
         """
-        Get all projects from the task manager.
+        Retrieve tasks with filtering options.
 
-        Returns a list of all projects that the authenticated user has access to.
-        Each project includes its ID, name, description, and other metadata.
+        Args:
+            status: Filter by status - one of "pending", "completed", "overdue", or "all"
+            start_date: Filter tasks with due date on or after this date (ISO format, e.g., "2025-12-14")
+            end_date: Filter tasks with due date on or before this date (ISO format, e.g., "2025-12-20")
+            category: Filter by category/project name
+            limit: Maximum number of tasks to return
 
         Returns:
-            JSON string containing list of project objects with fields like id, name, description, created_at, etc.
+            JSON object with "tasks" array containing task objects with fields:
+            id, title, description, due_date, status, category, priority, tags, created_at, updated_at
         """
-        logger.info("=== get_all_projects called ===")
+        logger.info(
+            f"=== get_tasks called: status={status}, start_date={start_date}, "
+            f"end_date={end_date}, category={category}, limit={limit} ==="
+        )
         try:
             api_client = get_api_client()
             logger.debug("API client created successfully")
 
-            response = api_client.get_projects()
-            logger.info(
-                f"get_projects response: success={response.success}, status={response.status_code}"
-            )
+            # Get projects to map category names to IDs and for task category lookup
+            projects_response = api_client.get_projects()
+            projects_map: dict[int, str] = {}
+            category_to_project_id: dict[str, int] = {}
+            if projects_response.success and projects_response.data:
+                for project in projects_response.data:
+                    projects_map[project["id"]] = project["name"]
+                    category_to_project_id[project["name"].lower()] = project["id"]
 
-            if not response.success:
-                logger.error(f"Failed to get projects: {response.error}")
-                return json.dumps({"error": response.error})
+            # Build query params for API call
+            project_id = None
+            if category:
+                project_id = category_to_project_id.get(category.lower())
+                if project_id is None:
+                    logger.warning(f"Category '{category}' not found")
 
-            projects = response.data
-            logger.info(f"Retrieved {len(projects) if projects else 0} projects")
+            # Map status for API (handle "overdue" and "all" specially)
+            api_status = None
+            if status and status.lower() not in ("all", "overdue"):
+                api_status = status.lower()
 
-            if projects is None:
-                logger.warning("Projects data is None")
-                return json.dumps([])
-
-            result = json.dumps(projects)
-            logger.debug(f"Returning projects JSON: {result[:200]}...")
-            return result
-        except Exception as e:
-            logger.error(f"Exception in get_all_projects: {e}", exc_info=True)
-            return json.dumps({"error": str(e)})
-
-    @app.tool()
-    async def get_all_tasks() -> str:
-        """
-        Get all tasks (todos) from the task manager.
-
-        Returns a list of all tasks that the authenticated user has access to.
-        Each task includes its ID, title, description, status, priority, project assignment,
-        and other metadata.
-
-        Returns:
-            JSON string containing list of task objects with fields like id, title, description, status,
-            priority, project_id, due_date, created_at, etc.
-        """
-        logger.info("=== get_all_tasks called ===")
-        try:
-            api_client = get_api_client()
-            logger.debug("API client created successfully")
-
-            response = api_client.get_todos()
+            response = api_client.get_todos(project_id=project_id, status=api_status)
             logger.info(
                 f"get_todos response: success={response.success}, status={response.status_code}"
             )
@@ -352,49 +346,120 @@ def create_resource_server(
                 logger.error(f"Failed to get tasks: {response.error}")
                 return json.dumps({"error": response.error})
 
-            tasks = response.data
-            logger.info(f"Retrieved {len(tasks) if tasks else 0} tasks")
+            tasks = response.data or []
+            logger.info(f"Retrieved {len(tasks)} tasks before filtering")
 
-            if tasks is None:
-                logger.warning("Tasks data is None")
-                return json.dumps([])
+            # Apply date filtering
+            filtered_tasks = []
+            now = datetime.datetime.now().date()
+            for task in tasks:
+                task_due_date = task.get("due_date")
+                if task_due_date:
+                    try:
+                        due_date = datetime.datetime.fromisoformat(
+                            task_due_date.replace("Z", "+00:00")
+                        ).date()
 
-            result = json.dumps(tasks)
-            logger.debug(f"Returning tasks JSON: {result[:200]}...")
-            return result
+                        # Filter by start_date
+                        if start_date:
+                            start = datetime.datetime.fromisoformat(start_date).date()
+                            if due_date < start:
+                                continue
+
+                        # Filter by end_date
+                        if end_date:
+                            end = datetime.datetime.fromisoformat(end_date).date()
+                            if due_date > end:
+                                continue
+
+                        # Filter overdue tasks
+                        if (
+                            status
+                            and status.lower() == "overdue"
+                            and (due_date >= now or task.get("status") == "completed")
+                        ):
+                            continue
+                    except ValueError:
+                        pass  # Skip date filtering if date parsing fails
+                elif status and status.lower() == "overdue":
+                    # Tasks without due dates can't be overdue
+                    continue
+
+                filtered_tasks.append(task)
+
+            # Apply limit
+            if limit and limit > 0:
+                filtered_tasks = filtered_tasks[:limit]
+
+            # Transform tasks to match expected output format
+            result_tasks = []
+            for task in filtered_tasks:
+                result_tasks.append(
+                    {
+                        "id": f"task_{task['id']}",
+                        "title": task.get("title", ""),
+                        "description": task.get("description"),
+                        "due_date": task.get("due_date"),
+                        "status": task.get("status", "pending"),
+                        "category": (
+                            projects_map.get(task.get("project_id"))
+                            if task.get("project_id")
+                            else None
+                        ),
+                        "priority": task.get("priority", "medium"),
+                        "tags": task.get("tags") or [],
+                        "created_at": task.get("created_at"),
+                        "updated_at": task.get("updated_at"),
+                    }
+                )
+
+            logger.info(f"Returning {len(result_tasks)} tasks after filtering")
+            return json.dumps({"tasks": result_tasks})
         except Exception as e:
-            logger.error(f"Exception in get_all_tasks: {e}", exc_info=True)
+            logger.error(f"Exception in get_tasks: {e}", exc_info=True)
             return json.dumps({"error": str(e)})
 
     @app.tool()
     async def create_task(
         title: str,
-        project_id: int | None = None,
         description: str | None = None,
-        priority: str = "medium",
         due_date: str | None = None,
+        category: str | None = None,
+        priority: str = "medium",
+        tags: list[str] | None = None,
     ) -> str:
         """
-        Create a new task in the task manager.
-
-        Creates a new task with the specified title and optional metadata.
-        The task will be assigned to the authenticated user and can optionally
-        be associated with a project.
+        Create a new task.
 
         Args:
-            title: The title/name of the task (required)
-            project_id: Optional ID of the project to assign this task to
-            description: Optional detailed description of the task
-            priority: Priority level - one of "low", "medium", "high" (default: "medium")
-            due_date: Optional due date in ISO format (YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS)
+            title: Task title (required)
+            description: Task details (optional)
+            due_date: Due date in ISO format, e.g., "2025-12-20" (optional)
+            category: Task category/project name (optional)
+            priority: Priority level - one of "low", "medium", "high", "urgent" (default: "medium")
+            tags: List of task tags (optional)
 
         Returns:
-            The created task object with generated ID and other metadata
+            JSON object with id, title, and status fields confirming task creation
         """
-        logger.info(f"=== create_task called: title='{title}', project_id={project_id} ===")
+        logger.info(
+            f"=== create_task called: title='{title}', category={category}, priority={priority} ==="
+        )
         try:
             api_client = get_api_client()
             logger.debug("API client created successfully")
+
+            # Map category name to project_id
+            project_id = None
+            if category:
+                projects_response = api_client.get_projects()
+                if projects_response.success and projects_response.data:
+                    for project in projects_response.data:
+                        if project["name"].lower() == category.lower():
+                            project_id = project["id"]
+                            break
+                if project_id is None:
+                    logger.warning(f"Category '{category}' not found, task will have no category")
 
             response = api_client.create_todo(
                 title=title,
@@ -402,6 +467,7 @@ def create_resource_server(
                 description=description,
                 priority=priority,
                 due_date=due_date,
+                tags=tags,
             )
             logger.info(
                 f"create_todo response: success={response.success}, status={response.status_code}"
@@ -418,11 +484,240 @@ def create_resource_server(
                 logger.warning("Task data is None")
                 return json.dumps({"error": "No data returned from create_todo"})
 
-            result = json.dumps(task)
-            logger.debug(f"Returning task JSON: {result}")
-            return result
+            # Return response in expected format
+            result = {
+                "id": f"task_{task['id']}",
+                "title": task.get("title", title),
+                "status": "created",
+            }
+            return json.dumps(result)
         except Exception as e:
             logger.error(f"Exception in create_task: {e}", exc_info=True)
+            return json.dumps({"error": str(e)})
+
+    @app.tool()
+    async def update_task(
+        task_id: str,
+        title: str | None = None,
+        description: str | None = None,
+        due_date: str | None = None,
+        status: str | None = None,
+        category: str | None = None,
+        priority: str | None = None,
+        tags: list[str] | None = None,
+    ) -> str:
+        """
+        Update an existing task.
+
+        Args:
+            task_id: Task ID (required) - format "task_123" or just "123"
+            title: New title (optional)
+            description: New description (optional)
+            due_date: New due date in ISO format for rescheduling (optional)
+            status: New status - one of "pending", "in_progress", "completed", "cancelled" (optional)
+            category: New category/project name (optional)
+            priority: New priority - one of "low", "medium", "high", "urgent" (optional)
+            tags: New list of tags (optional)
+
+        Returns:
+            JSON object with id, updated_fields list, and status confirming update
+        """
+        logger.info(f"=== update_task called: task_id='{task_id}' ===")
+        try:
+            api_client = get_api_client()
+            logger.debug("API client created successfully")
+
+            # Extract numeric ID from task_id (handle both "task_123" and "123" formats)
+            numeric_id = task_id.replace("task_", "") if task_id.startswith("task_") else task_id
+            try:
+                todo_id = int(numeric_id)
+            except ValueError:
+                return json.dumps({"error": f"Invalid task_id format: {task_id}"})
+
+            # Map category name to project_id if provided
+            project_id = None
+            if category:
+                projects_response = api_client.get_projects()
+                if projects_response.success and projects_response.data:
+                    for project in projects_response.data:
+                        if project["name"].lower() == category.lower():
+                            project_id = project["id"]
+                            break
+                if project_id is None:
+                    logger.warning(f"Category '{category}' not found")
+
+            # Track which fields are being updated
+            updated_fields = []
+            if title is not None:
+                updated_fields.append("title")
+            if description is not None:
+                updated_fields.append("description")
+            if due_date is not None:
+                updated_fields.append("due_date")
+            if status is not None:
+                updated_fields.append("status")
+            if category is not None:
+                updated_fields.append("category")
+            if priority is not None:
+                updated_fields.append("priority")
+            if tags is not None:
+                updated_fields.append("tags")
+
+            response = api_client.update_todo(
+                todo_id=todo_id,
+                title=title,
+                description=description,
+                priority=priority,
+                status=status,
+                due_date=due_date,
+                tags=tags,
+                project_id=project_id,
+            )
+            logger.info(
+                f"update_todo response: success={response.success}, status={response.status_code}"
+            )
+
+            if not response.success:
+                logger.error(f"Failed to update task: {response.error}")
+                return json.dumps({"error": response.error})
+
+            # Return response in expected format
+            result = {
+                "id": f"task_{todo_id}",
+                "updated_fields": updated_fields,
+                "status": "updated",
+            }
+            return json.dumps(result)
+        except Exception as e:
+            logger.error(f"Exception in update_task: {e}", exc_info=True)
+            return json.dumps({"error": str(e)})
+
+    @app.tool()
+    async def get_categories() -> str:
+        """
+        List all available task categories.
+
+        Returns a list of all categories (projects) with the count of tasks in each.
+
+        Returns:
+            JSON object with "categories" array containing objects with name and task_count fields
+        """
+        logger.info("=== get_categories called ===")
+        try:
+            api_client = get_api_client()
+            logger.debug("API client created successfully")
+
+            # Get all projects
+            projects_response = api_client.get_projects()
+            if not projects_response.success:
+                logger.error(f"Failed to get projects: {projects_response.error}")
+                return json.dumps({"error": projects_response.error})
+
+            projects = projects_response.data or []
+
+            # Get all tasks to count per category
+            todos_response = api_client.get_todos()
+            tasks = todos_response.data or [] if todos_response.success else []
+
+            # Count tasks per project
+            task_counts: dict[int, int] = {}
+            for task in tasks:
+                project_id = task.get("project_id")
+                if project_id:
+                    task_counts[project_id] = task_counts.get(project_id, 0) + 1
+
+            # Build categories list
+            categories = []
+            for project in projects:
+                categories.append(
+                    {
+                        "name": project["name"],
+                        "task_count": task_counts.get(project["id"], 0),
+                    }
+                )
+
+            logger.info(f"Returning {len(categories)} categories")
+            return json.dumps({"categories": categories})
+        except Exception as e:
+            logger.error(f"Exception in get_categories: {e}", exc_info=True)
+            return json.dumps({"error": str(e)})
+
+    @app.tool()
+    async def search_tasks(
+        query: str,
+        category: str | None = None,
+    ) -> str:
+        """
+        Search tasks by keyword.
+
+        Searches task titles and descriptions for the given query string.
+
+        Args:
+            query: Search query string (required)
+            category: Filter by category/project name (optional)
+
+        Returns:
+            JSON object with "tasks" array (same format as get_tasks) and "count" field
+        """
+        logger.info(f"=== search_tasks called: query='{query}', category={category} ===")
+        try:
+            api_client = get_api_client()
+            logger.debug("API client created successfully")
+
+            # Get projects for category mapping
+            projects_response = api_client.get_projects()
+            projects_map: dict[int, str] = {}
+            category_to_project_id: dict[str, int] = {}
+            if projects_response.success and projects_response.data:
+                for project in projects_response.data:
+                    projects_map[project["id"]] = project["name"]
+                    category_to_project_id[project["name"].lower()] = project["id"]
+
+            # Filter by category if provided
+            project_id = None
+            if category:
+                project_id = category_to_project_id.get(category.lower())
+
+            response = api_client.get_todos(project_id=project_id)
+            if not response.success:
+                logger.error(f"Failed to get tasks: {response.error}")
+                return json.dumps({"error": response.error})
+
+            tasks = response.data or []
+
+            # Search in title and description
+            query_lower = query.lower()
+            matching_tasks = []
+            for task in tasks:
+                title = task.get("title", "").lower()
+                description = (task.get("description") or "").lower()
+                tags = task.get("tags") or []
+                tags_text = " ".join(tags).lower()
+
+                if query_lower in title or query_lower in description or query_lower in tags_text:
+                    matching_tasks.append(
+                        {
+                            "id": f"task_{task['id']}",
+                            "title": task.get("title", ""),
+                            "description": task.get("description"),
+                            "due_date": task.get("due_date"),
+                            "status": task.get("status", "pending"),
+                            "category": (
+                                projects_map.get(task.get("project_id"))
+                                if task.get("project_id")
+                                else None
+                            ),
+                            "priority": task.get("priority", "medium"),
+                            "tags": task.get("tags") or [],
+                            "created_at": task.get("created_at"),
+                            "updated_at": task.get("updated_at"),
+                        }
+                    )
+
+            logger.info(f"Found {len(matching_tasks)} tasks matching query '{query}'")
+            return json.dumps({"tasks": matching_tasks, "count": len(matching_tasks)})
+        except Exception as e:
+            logger.error(f"Exception in search_tasks: {e}", exc_info=True)
             return json.dumps({"error": str(e)})
 
     return app

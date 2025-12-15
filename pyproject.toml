@@ -4,7 +4,9 @@ version = "0.1.0"
 description = "OAuth-protected MCP server for TaskManager"
 readme = "README.md"
 requires-python = ">=3.13"
-dependencies = []
+dependencies = [
+    "taskmanager-sdk",
+]
 
 [project.optional-dependencies]
 dev = [
@@ -125,3 +127,6 @@ markers = [
     "integration: marks tests as integration tests",
     "asyncio: marks tests as async (run with pytest-asyncio)",
 ]
+
+[tool.uv.sources]
+taskmanager-sdk = { git = "https://github.com/brooksmcmillin/taskmanager-sdk.git" }
