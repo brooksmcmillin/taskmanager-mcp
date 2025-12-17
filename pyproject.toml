@@ -5,6 +5,7 @@ description = "OAuth-protected MCP server for TaskManager"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
+    "isort>=7.0.0",
     "taskmanager-sdk",
 ]
 
@@ -130,3 +131,9 @@ markers = [
 
 [tool.uv.sources]
 taskmanager-sdk = { git = "https://github.com/brooksmcmillin/taskmanager-sdk.git" }
+
+[dependency-groups]
+dev = [
+    "isort>=7.0.0",
+    "mypy>=1.19.0",
+]

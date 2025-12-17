@@ -77,9 +77,7 @@ def create_logging_middleware(app):
                 }
 
                 # Log response status
-                logger.info(
-                    f"=== Response: {response_status[0]} for {method} {path} ==="
-                )
+                logger.info(f"=== Response: {response_status[0]} for {method} {path} ===")
 
                 # If it's a 400 error, log more details
                 if response_status[0] == 400:
@@ -119,6 +117,7 @@ def create_logging_middleware(app):
             await app(scope, receive, send_wrapper)
 
     return middleware
+
 
 DEFAULT_SCOPE = ["read"]
 

@@ -471,6 +471,7 @@ name = "taskmanager-mcp"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
+    { name = "isort" },
     { name = "taskmanager-sdk" },
 ]
 
@@ -487,9 +488,16 @@ dev = [
     { name = "types-requests" },
 ]
 
+[package.dev-dependencies]
+dev = [
+    { name = "isort" },
+    { name = "mypy" },
+]
+
 [package.metadata]
 requires-dist = [
     { name = "black", marker = "extra == 'dev'", specifier = ">=24.0.0" },
+    { name = "isort", specifier = ">=7.0.0" },
     { name = "isort", marker = "extra == 'dev'", specifier = ">=5.13.0" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.8.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0.0" },
@@ -501,6 +509,12 @@ requires-dist = [
     { name = "types-requests", marker = "extra == 'dev'", specifier = ">=2.31.0" },
 ]
 provides-extras = ["dev"]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "isort", specifier = ">=7.0.0" },
+    { name = "mypy", specifier = ">=1.19.0" },
+]
 
 [[package]]
 name = "taskmanager-sdk"
