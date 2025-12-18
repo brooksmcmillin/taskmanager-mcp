@@ -1244,7 +1244,6 @@ version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
     { name = "aiohttp" },
-    { name = "isort" },
     { name = "mcp" },
     { name = "taskmanager-sdk" },
     { name = "types-requests" },
@@ -1273,7 +1272,6 @@ dev = [
 requires-dist = [
     { name = "aiohttp", specifier = ">=3.13.2" },
     { name = "black", marker = "extra == 'dev'", specifier = ">=24.0.0" },
-    { name = "isort", specifier = ">=7.0.0" },
     { name = "isort", marker = "extra == 'dev'", specifier = ">=5.13.0" },
     { name = "mcp", specifier = ">=1.24.0" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.8.0" },
