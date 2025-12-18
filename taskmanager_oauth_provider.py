@@ -204,6 +204,7 @@ class TaskManagerOAuthProvider(
         This stores the client information locally and optionally registers
         it with the taskmanager system if admin credentials are available.
         """
+        assert client_info.client_id is not None
         self.clients[client_info.client_id] = client_info
         logger.info(f"Registered OAuth client: {client_info.client_id}")
 
@@ -442,6 +443,7 @@ class TaskManagerOAuthProvider(
         logger.info(f"Generated MCP token: {mcp_token}")
 
         # Store MCP token (linked to taskmanager token if needed)
+        assert client.client_id is not None
         access_token = AccessToken(
             token=mcp_token,
             client_id=client.client_id,

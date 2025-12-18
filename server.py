@@ -2,6 +2,7 @@ import datetime
 import json
 import logging
 import os
+from collections.abc import Callable
 from typing import Any
 
 import click
@@ -18,13 +19,13 @@ from token_verifier import IntrospectionTokenVerifier
 logger = logging.getLogger(__name__)
 
 
-def create_logging_middleware(app):
+def create_logging_middleware(app: Any) -> Callable[[dict[str, Any], Any, Any], Any]:
     """Create ASGI middleware to log detailed request information for debugging.
 
     Uses raw ASGI interface to avoid interfering with request body or streaming.
     """
 
-    async def middleware(scope, receive, send):
+    async def middleware(scope: dict[str, Any], receive: Any, send: Any) -> Any:
         if scope["type"] != "http":
             await app(scope, receive, send)
             return
@@ -67,9 +68,9 @@ def create_logging_middleware(app):
 
         # Track response status
         response_status = [None]
-        response_headers = [{}]
+        response_headers: list[dict[str, str]] = [{}]
 
-        async def send_wrapper(message):
+        async def send_wrapper(message: dict[str, Any]) -> Any:
             if message["type"] == "http.response.start":
                 response_status[0] = message.get("status")
                 response_headers[0] = {
@@ -96,7 +97,7 @@ def create_logging_middleware(app):
         # Log body for POST requests by wrapping receive
         body_logged = [False]
 
-        async def receive_with_logging():
+        async def receive_with_logging() -> Any:
             message = await receive()
             if message["type"] == "http.request" and not body_logged[0]:
                 body_logged[0] = True

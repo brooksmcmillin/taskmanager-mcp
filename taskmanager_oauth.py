@@ -31,6 +31,7 @@ class TaskManagerOAuthProvider(
         return self.clients.get(client_id)
 
     async def register_client(self, client_info: OAuthClientInformationFull) -> None:
+        assert client_info.client_id is not None
         self.clients[client_info.client_id] = client_info
 
     async def authorize(
