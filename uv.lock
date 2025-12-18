@@ -1266,6 +1266,7 @@ dev = [
 dev = [
     { name = "isort" },
     { name = "mypy" },
+    { name = "pytest" },
 ]
 
 [package.metadata]
@@ -1290,6 +1291,7 @@ provides-extras = ["dev"]
 dev = [
     { name = "isort", specifier = ">=7.0.0" },
     { name = "mypy", specifier = ">=1.19.0" },
+    { name = "pytest", specifier = ">=9.0.2" },
 ]
 
 [[package]]

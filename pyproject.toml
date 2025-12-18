@@ -138,4 +138,5 @@ taskmanager-sdk = { git = "https://github.com/brooksmcmillin/taskmanager-sdk.git
 dev = [
     "isort>=7.0.0",
     "mypy>=1.19.0",
+    "pytest>=9.0.2",
 ]
