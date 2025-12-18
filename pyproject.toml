@@ -11,19 +11,6 @@ dependencies = [
     "types-requests>=2.32.4.20250913",
 ]
 
-[project.optional-dependencies]
-dev = [
-    "black>=24.0.0",
-    "isort>=5.13.0",
-    "mypy>=1.8.0",
-    "pytest>=8.0.0",
-    "pytest-asyncio>=0.23.0",
-    "pytest-cov>=4.1.0",
-    "pytest-mock>=3.12.0",
-    "ruff>=0.2.0",
-    "types-requests>=2.31.0",
-]
-
 [tool.black]
 line-length = 100
 target-version = ['py311', 'py312', 'py313']
@@ -136,6 +123,13 @@ taskmanager-sdk = { git = "https://github.com/brooksmcmillin/taskmanager-sdk.git
 
 [dependency-groups]
 dev = [
+    "black>=24.0.0",
     "isort>=7.0.0",
     "mypy>=1.19.0",
+    "pytest>=9.0.2",
+    "pytest-asyncio>=0.23.0",
+    "pytest-cov>=4.1.0",
+    "pytest-mock>=3.12.0",
+    "ruff>=0.2.0",
+    "types-requests>=2.32.0",
 ]
