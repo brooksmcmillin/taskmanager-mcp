@@ -171,9 +171,6 @@ class TaskManagerOAuthProvider(
                     if client_data["token_endpoint_auth_method"] == "none"
                     else client_data["client_secret"]
                 )
-                logger.info(
-                    f"Using client_secret: {client_secret} for auth method: {client_data['token_endpoint_auth_method']}"
-                )
 
                 client_info = OAuthClientInformationFull(
                     client_id=client_data["client_id"],
@@ -464,7 +461,6 @@ class TaskManagerOAuthProvider(
             expires_in=3600,
             scope=" ".join(authorization_code.scopes),
         )
-        logger.info(f"Created OAuth token response: {oauth_token}")
 
         return oauth_token
 
