@@ -19,8 +19,8 @@ from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 from uvicorn import Config, Server
 
-from task_api import TaskManagerAPI
-from taskmanager_oauth_provider import TaskManagerAuthSettings, TaskManagerOAuthProvider
+from .task_api import TaskManagerAPI
+from .taskmanager_oauth_provider import TaskManagerAuthSettings, TaskManagerOAuthProvider
 
 load_dotenv()
 logger = logging.getLogger(__name__)
@@ -643,7 +643,7 @@ def main(port: int, taskmanager_url: str, server_url: str | None = None) -> int:
 
     # Initialize API client for backend database operations
     global api_client
-    from task_api import create_authenticated_client
+    from .task_api import create_authenticated_client
 
     api_client = create_authenticated_client(username, password, f"{taskmanager_url}/api")
 

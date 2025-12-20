@@ -2,7 +2,7 @@ services:
   auth-server:
     build: .
     container_name: taskmanager-auth-server
-    command: python auth_server.py --port 9000 --taskmanager-url ${TASKMANAGER_OAUTH_HOST:-localhost:4321}
+    command: python -m taskmanager_mcp.auth_server --port 9000 --taskmanager-url ${TASKMANAGER_OAUTH_HOST:-localhost:4321}
     ports:
       - "9000:9000"
     environment:
@@ -20,7 +20,7 @@ services:
   resource-server:
     build: .
     container_name: taskmanager-resource-server
-    command: python server.py --port 8001 --auth-server http://auth-server:9000 --auth-server-public-url $MCP_AUTH_SERVER_PUBLIC_URL
+    command: python -m taskmanager_mcp.server --port 8001 --auth-server http://auth-server:9000 --auth-server-public-url $MCP_AUTH_SERVER_PUBLIC_URL
     ports:
       - "8001:8001"
     environment:

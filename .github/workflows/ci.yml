@@ -37,19 +37,19 @@ jobs:
 
     - name: Check code formatting with Black
       run: |
-        black --check --diff *.py
+        black --check --diff **/*.py
 
     - name: Check import sorting with isort
       run: |
-        isort --check-only --diff *.py
+        isort --check-only --diff **/*.py
 
     - name: Lint with Ruff
       run: |
-        ruff check *.py
+        ruff check **/*.py
 
     - name: Run mypy type checking
       run: |
-        mypy --config-file mypy.ini *.py
+        mypy --config-file mypy.ini **/*.py
 
     - name: Run tests with pytest
       run: |

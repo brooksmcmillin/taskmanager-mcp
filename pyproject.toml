@@ -11,6 +11,14 @@ dependencies = [
     "types-requests>=2.32.4.20250913",
 ]
 
+[project.scripts]
+taskmanager-mcp-server = "taskmanager_mcp.server:main"
+taskmanager-mcp-auth = "taskmanager_mcp.auth_server:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["taskmanager_mcp*"]
+
 [tool.black]
 line-length = 100
 target-version = ['py311', 'py312', 'py313']

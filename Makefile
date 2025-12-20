@@ -19,22 +19,22 @@ test:  ## Run tests
 	pytest tests/ -v --tb=short
 
 test-cov:  ## Run tests with coverage
-	pytest tests/ -v --cov=. --cov-report=html --cov-report=term
+	pytest tests/ -v --cov=taskmanager_mcp --cov-report=html --cov-report=term
 
 lint:  ## Run all linting checks
 	@echo "Running Black..."
-	black --check *.py
+	black --check taskmanager_mcp/
 	@echo "Running isort..."
-	isort --check-only *.py
+	isort --check-only taskmanager_mcp/
 	@echo "Running Ruff..."
-	ruff check *.py
+	ruff check taskmanager_mcp/
 	@echo "Running mypy..."
-	mypy --config-file mypy.ini *.py
+	mypy --config-file mypy.ini taskmanager_mcp/
 
 format:  ## Auto-format code
-	black *.py
-	isort *.py
-	ruff check --fix *.py
+	black taskmanager_mcp/
+	isort taskmanager_mcp/
+	ruff check --fix taskmanager_mcp/
 
 security:  ## Run security checks
 	@echo "Running pip-audit..."
