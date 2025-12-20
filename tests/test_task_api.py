@@ -4,7 +4,7 @@ from unittest.mock import Mock, patch
 import pytest
 import requests
 
-from task_api import TaskManagerAPI, ApiResponse, create_authenticated_client
+from taskmanager_mcp.task_api import TaskManagerAPI, ApiResponse, create_authenticated_client
 
 
 class TestApiResponse:
@@ -39,7 +39,7 @@ class TestTaskManagerAPI:
         api = TaskManagerAPI(session=mock_session)
         assert api.session is mock_session
 
-    @patch('task_api.requests.Session')
+    @patch('taskmanager_mcp.task_api.requests.Session')
     def test_make_request_get_success(self, mock_session_class):
         mock_session = Mock()
         mock_response = Mock()
@@ -64,7 +64,7 @@ class TestTaskManagerAPI:
             params={'param': 'value'}
         )
 
-    @patch('task_api.requests.Session')
+    @patch('taskmanager_mcp.task_api.requests.Session')
     def test_make_request_post_success(self, mock_session_class):
         mock_session = Mock()
         mock_response = Mock()
@@ -90,7 +90,7 @@ class TestTaskManagerAPI:
             params=None
         )
 
-    @patch('task_api.requests.Session')
+    @patch('taskmanager_mcp.task_api.requests.Session')
     def test_make_request_error_response(self, mock_session_class):
         mock_session = Mock()
         mock_response = Mock()
@@ -111,7 +111,7 @@ class TestTaskManagerAPI:
         assert result.error == "Not found"
         assert result.status_code == 404
 
-    @patch('task_api.requests.Session')
+    @patch('taskmanager_mcp.task_api.requests.Session')
     def test_make_request_network_error(self, mock_session_class):
         mock_session = Mock()
         mock_session.get.side_effect = requests.exceptions.ConnectionError("Network error")
@@ -125,7 +125,7 @@ class TestTaskManagerAPI:
         assert result.success is False
         assert "Network error" in result.error
 
-    @patch('task_api.requests.Session')
+    @patch('taskmanager_mcp.task_api.requests.Session')
     def test_make_request_set_cookie(self, mock_session_class):
         mock_session = Mock()
         mock_response = Mock()

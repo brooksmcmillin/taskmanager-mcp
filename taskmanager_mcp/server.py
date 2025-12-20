@@ -13,8 +13,8 @@ from pydantic import AnyHttpUrl
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
-from task_api import TaskManagerAPI
-from token_verifier import IntrospectionTokenVerifier
+from .task_api import TaskManagerAPI
+from .token_verifier import IntrospectionTokenVerifier
 
 logger = logging.getLogger(__name__)
 

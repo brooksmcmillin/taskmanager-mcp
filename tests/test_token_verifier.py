@@ -3,7 +3,7 @@ import pytest
 from unittest.mock import AsyncMock, Mock, patch
 import httpx
 
-from token_verifier import IntrospectionTokenVerifier
+from taskmanager_mcp.token_verifier import IntrospectionTokenVerifier
 from mcp.server.auth.provider import AccessToken
 
 
@@ -280,7 +280,7 @@ class TestIntrospectionTokenVerifier:
             server_url="https://api.example.com"
         )
         
-        with patch('token_verifier.check_resource_allowed', return_value=True) as mock_check:
+        with patch('taskmanager_mcp.token_verifier.check_resource_allowed', return_value=True) as mock_check:
             result = verifier._is_valid_resource("https://api.example.com")
             
             assert result is True

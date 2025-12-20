@@ -20,4 +20,4 @@ COPY . .
 EXPOSE 8001 9000
 
 # Default command (can be overridden in docker-compose)
-CMD ["python", "server.py"]
+CMD ["python", "-m", "taskmanager_mcp.server"]
