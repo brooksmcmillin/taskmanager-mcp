@@ -21,6 +21,7 @@ from uvicorn import Config, Server
 
 from .task_api import TaskManagerAPI
 from .taskmanager_oauth_provider import TaskManagerAuthSettings, TaskManagerOAuthProvider
+from .token_storage import TokenStorage
 
 load_dotenv()
 logger = logging.getLogger(__name__)
@@ -38,8 +39,13 @@ class TaskManagerAuthProvider(
     3. Stores token state for introspection by Resource Servers
     """
 
-    def __init__(self, auth_settings: TaskManagerAuthSettings, server_url: str):
-        super().__init__(auth_settings, server_url)
+    def __init__(
+        self,
+        auth_settings: TaskManagerAuthSettings,
+        server_url: str,
+        token_storage: TokenStorage | None = None,
+    ):
+        super().__init__(auth_settings, server_url, token_storage=token_storage)
         self.registered_clients: dict[str, Any] = {}
 
 
@@ -147,11 +153,15 @@ registered_clients = {}
 
 
 def create_authorization_server(
-    host: str, port: int, server_url: AnyHttpUrl, auth_settings: TaskManagerAuthSettings
+    host: str,
+    port: int,
+    server_url: AnyHttpUrl,
+    auth_settings: TaskManagerAuthSettings,
+    token_storage: TokenStorage | None = None,
 ) -> Starlette:
     """Create the Authorization Server application."""
     oauth_provider = TaskManagerAuthProvider(  # type: ignore[var-annotated]
-        auth_settings, str(server_url)
+        auth_settings, str(server_url), token_storage=token_storage
     )
 
     # Load and share registered clients with OAuth provider
@@ -333,11 +343,17 @@ def create_authorization_server(
         """
         form = await request.form()
         token = form.get("token")
+        logger.info("=== INTROSPECT HANDLER ===")
+        logger.info(f"Token from request: {token[:20]}...{token[-10:]}" if token and len(token) > 30 else f"Token: {token}")
+
         if not token or not isinstance(token, str):
+            logger.warning("No token or invalid token type in request")
             return JSONResponse({"active": False}, status_code=400)
 
         # Use provider's introspection method
         introspection_result = await oauth_provider.introspect_token(token)
+        logger.info(f"Introspection result: {introspection_result}")
+
         if not introspection_result:
             return JSONResponse({"active": False})
 
@@ -589,7 +605,34 @@ async def run_server(
     host: str, port: int, server_url: AnyHttpUrl, auth_settings: TaskManagerAuthSettings
 ) -> None:
     """Run the Authorization Server."""
-    auth_server = create_authorization_server(host, port, server_url, auth_settings)
+    # Initialize persistent token storage if DATABASE_URL is configured
+    token_storage: TokenStorage | None = None
+    database_url = os.environ.get("DATABASE_URL")
+
+    if database_url:
+        logger.info("Initializing database token storage...")
+        token_storage = TokenStorage(database_url)
+        try:
+            await token_storage.initialize()
+            logger.info("Database token storage initialized successfully")
+
+            # Clean up any expired tokens on startup
+            cleaned = await token_storage.cleanup_expired_tokens()
+            if cleaned > 0:
+                logger.info(f"Cleaned up {cleaned} expired tokens on startup")
+        except Exception as e:
+            logger.error(f"Failed to initialize database token storage: {e}")
+            logger.warning("Falling back to in-memory token storage")
+            token_storage = None
+    else:
+        logger.warning(
+            "DATABASE_URL not configured - using in-memory token storage. "
+            "Tokens will be lost on server restart!"
+        )
+
+    auth_server = create_authorization_server(
+        host, port, server_url, auth_settings, token_storage=token_storage
+    )
 
     config = Config(
         auth_server,
@@ -603,13 +646,20 @@ async def run_server(
     server_url_str = str(server_url).rstrip("/")
     server_url = AnyHttpUrl(server_url_str)
 
+    storage_type = "database" if token_storage else "in-memory"
     logger.info("=" * 60)
     logger.info(f"🚀 MCP Authorization Server running on {server_url}")
     logger.info(f"📍 Public URL: {server_url}")
     logger.info(f"🔌 Binding to: {host}:{port}")
+    logger.info(f"💾 Token storage: {storage_type}")
     logger.info("=" * 60)
 
-    await server.serve()
+    try:
+        await server.serve()
+    finally:
+        # Clean up token storage on shutdown
+        if token_storage:
+            await token_storage.close()
 
 
 @click.command()

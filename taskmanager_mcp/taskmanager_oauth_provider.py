@@ -19,7 +19,7 @@ import logging
 import os
 import secrets
 import time
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 from urllib.parse import urlencode
 
 import aiohttp
@@ -41,6 +41,9 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 from starlette.exceptions import HTTPException
 from starlette.requests import Request
 from starlette.responses import RedirectResponse, Response
+
+if TYPE_CHECKING:
+    from .token_storage import TokenStorage
 
 logger = logging.getLogger(__name__)
 
@@ -95,28 +98,39 @@ class TaskManagerOAuthProvider(
     provider manages the MCP-specific integration details.
     """
 
-    def __init__(self, settings: TaskManagerAuthSettings, server_url: str):
+    def __init__(
+        self,
+        settings: TaskManagerAuthSettings,
+        server_url: str,
+        token_storage: "TokenStorage | None" = None,
+    ):
         """
         Initialize the TaskManager OAuth provider.
 
         Args:
             settings: Configuration for connecting to taskmanager
             server_url: The URL of this MCP server (for redirect URIs)
+            token_storage: Optional persistent token storage. If not provided,
+                          tokens are stored in memory (not recommended for production).
         """
         self.settings = settings
         self.server_url = server_url
+        self.token_storage = token_storage
 
-        # In-memory storage for this demo
-        # In production, you might want to use persistent storage
+        # In-memory storage (used as fallback or for auth codes/state)
         self.clients: dict[str, OAuthClientInformationFull] = {}
         self.auth_codes: dict[str, AuthorizationCode] = {}
-        self.tokens: dict[str, AccessToken] = {}
+        self.tokens: dict[str, AccessToken] = {}  # Fallback if no token_storage
         self.state_mapping: dict[str, dict[str, str | None]] = {}
 
         # HTTP session for making requests to taskmanager
         self._session: aiohttp.ClientSession | None = None
 
-        logger.info(f"Initialized TaskManager OAuth provider for {settings.base_url}")
+        storage_type = "database" if token_storage else "in-memory"
+        logger.info(
+            f"Initialized TaskManager OAuth provider for {settings.base_url} "
+            f"with {storage_type} token storage"
+        )
 
     async def _get_session(self) -> aiohttp.ClientSession:
         """Get or create HTTP session for taskmanager API calls."""
@@ -441,15 +455,29 @@ class TaskManagerOAuthProvider(
 
         # Store MCP token (linked to taskmanager token if needed)
         assert client.client_id is not None
+        expires_at = int(time.time()) + 3600  # 1 hour
         access_token = AccessToken(
             token=mcp_token,
             client_id=client.client_id,
             scopes=authorization_code.scopes,
-            expires_at=int(time.time()) + 3600,  # 1 hour
+            expires_at=expires_at,
             resource=authorization_code.resource,
         )
-        self.tokens[mcp_token] = access_token
-        logger.info(f"Stored access token, total tokens: {len(self.tokens)}")
+
+        # Store in database if available, otherwise fall back to in-memory
+        if self.token_storage:
+            await self.token_storage.store_token(
+                token=mcp_token,
+                client_id=client.client_id,
+                scopes=authorization_code.scopes,
+                expires_at=expires_at,
+                resource=authorization_code.resource,
+            )
+            token_count = await self.token_storage.get_token_count()
+            logger.info(f"Stored access token in database, total tokens: {token_count}")
+        else:
+            self.tokens[mcp_token] = access_token
+            logger.info(f"Stored access token in memory, total tokens: {len(self.tokens)}")
 
         # Clean up authorization code
         del self.auth_codes[authorization_code.code]
@@ -472,15 +500,58 @@ class TaskManagerOAuthProvider(
         that were issued based on taskmanager authentication, you might
         want to add additional validation here.
         """
+        logger.info("=== LOAD ACCESS TOKEN ===")
+        logger.info(
+            f"Looking for token: {token[:20]}...{token[-10:]}"
+            if len(token) > 30
+            else f"Token: {token}"
+        )
+
+        # Try database storage first if available
+        if self.token_storage:
+            token_count = await self.token_storage.get_token_count()
+            logger.info(f"Database token storage has {token_count} tokens")
+
+            token_data = await self.token_storage.load_token(token)
+            if not token_data:
+                logger.warning("Token NOT FOUND in database!")
+                return None
+
+            logger.info(
+                f"Token found in database! Client: {token_data['client_id']}, "
+                f"Scopes: {token_data['scopes']}"
+            )
+
+            access_token = AccessToken(
+                token=token_data["token"],
+                client_id=token_data["client_id"],
+                scopes=token_data["scopes"],
+                expires_at=token_data["expires_at"],
+                resource=token_data["resource"],
+            )
+            logger.info(f"Token valid, expires at: {access_token.expires_at}")
+            return cast(AccessTokenT, access_token)
+
+        # Fall back to in-memory storage
+        logger.info(f"In-memory token storage has {len(self.tokens)} tokens")
+
         access_token = self.tokens.get(token)
         if not access_token:
+            logger.warning("Token NOT FOUND in memory storage!")
+            logger.warning(f"Available token prefixes: {[k[:20] for k in self.tokens]}")
             return None
+
+        logger.info(f"Token found! Client: {access_token.client_id}, Scopes: {access_token.scopes}")
 
         # Check if expired
         if access_token.expires_at and access_token.expires_at < time.time():
+            logger.warning(
+                f"Token expired at {access_token.expires_at}, current time: {time.time()}"
+            )
             del self.tokens[token]
             return None
 
+        logger.info(f"Token valid, expires at: {access_token.expires_at}")
         return cast(AccessTokenT, access_token)
 
     async def load_refresh_token(
@@ -504,12 +575,17 @@ class TaskManagerOAuthProvider(
         """
         Revoke a token.
 
-        This removes the token from local storage. You might also want to
+        This removes the token from storage. You might also want to
         notify the taskmanager system about token revocation.
         """
-        if token in self.tokens:
-            del self.tokens[str(token)]
-            logger.info(f"Revoked token: {str(token)[:10]}...")
+        token_str = str(token.token) if hasattr(token, "token") else str(token)
+
+        if self.token_storage:
+            await self.token_storage.delete_token(token_str)
+            logger.info(f"Revoked token from database: {token_str[:10]}...")
+        elif token_str in self.tokens:
+            del self.tokens[token_str]
+            logger.info(f"Revoked token from memory: {token_str[:10]}...")
 
     async def introspect_token(self, token: str) -> dict[str, Any] | None:
         """
@@ -518,8 +594,23 @@ class TaskManagerOAuthProvider(
         This is used by MCP Resource Servers to validate tokens without
         direct access to token storage. Returns token metadata if valid.
         """
+        logger.info("=== INTROSPECT TOKEN ===")
+        logger.info(
+            f"Token to introspect: {token[:20]}...{token[-10:]}"
+            if len(token) > 30
+            else f"Token: {token}"
+        )
+
+        if self.token_storage:
+            token_count = await self.token_storage.get_token_count()
+            logger.info(f"Using database storage with {token_count} tokens")
+        else:
+            logger.info(f"Using in-memory storage with {len(self.tokens)} tokens")
+            logger.info(f"Available token keys: {[k[:20] + '...' for k in self.tokens]}")
+
         access_token = await self.load_access_token(token)
         if not access_token:
+            logger.warning("Token not found or expired in introspection")
             return {"active": False}
 
         return {
