@@ -6,6 +6,7 @@ readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
     "aiohttp>=3.13.2",
+    "asyncpg>=0.31.0",
     "mcp>=1.24.0",
     "taskmanager-sdk",
     "types-requests>=2.32.4.20250913",
@@ -131,6 +132,7 @@ taskmanager-sdk = { git = "https://github.com/brooksmcmillin/taskmanager-sdk.git
 
 [dependency-groups]
 dev = [
+    "asyncpg-stubs>=0.31.1",
     "black>=24.0.0",
     "isort>=7.0.0",
     "mypy>=1.19.0",
