@@ -522,13 +522,16 @@ class TaskManagerOAuthProvider(
                 f"Scopes: {token_data['scopes']}"
             )
 
-            access_token = AccessToken(
+            # Allow access_token to be None for later in the function
+            access_token: AccessToken | None = AccessToken(
                 token=token_data["token"],
                 client_id=token_data["client_id"],
                 scopes=token_data["scopes"],
                 expires_at=token_data["expires_at"],
                 resource=token_data["resource"],
             )
+
+            assert isinstance(access_token, AccessToken)
             logger.info(f"Token valid, expires at: {access_token.expires_at}")
             return cast(AccessTokenT, access_token)
 

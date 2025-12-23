@@ -344,7 +344,13 @@ def create_authorization_server(
         form = await request.form()
         token = form.get("token")
         logger.info("=== INTROSPECT HANDLER ===")
-        logger.info(f"Token from request: {token[:20]}...{token[-10:]}" if token and len(token) > 30 else f"Token: {token}")
+
+        if isinstance(token, str):
+            logger.info(
+                f"Token from request: {token[:20]}...{token[-10:]}"
+                if token and len(token) > 30
+                else f"Token: {token}"
+            )
 
         if not token or not isinstance(token, str):
             logger.warning("No token or invalid token type in request")

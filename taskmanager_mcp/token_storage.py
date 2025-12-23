@@ -32,9 +32,7 @@ class TokenStorage:
     async def initialize(self) -> None:
         """Initialize the database connection pool."""
         if not self.database_url:
-            raise ValueError(
-                "DATABASE_URL environment variable is required for token storage"
-            )
+            raise ValueError("DATABASE_URL environment variable is required for token storage")
 
         logger.info("Initializing database connection pool for token storage")
         self._pool = await asyncpg.create_pool(
