@@ -4,11 +4,13 @@ import logging
 import os
 from collections.abc import Callable
 from typing import Any
+from urllib.parse import urlparse
 
 import click
 from dotenv import load_dotenv
 from mcp.server.auth.settings import AuthSettings
 from mcp.server.fastmcp.server import FastMCP
+from mcp.server.transport_security import TransportSecuritySettings
 from pydantic import AnyHttpUrl
 from starlette.requests import Request
 from starlette.responses import JSONResponse
@@ -208,9 +210,13 @@ def create_resource_server(
         validate_resource=oauth_strict,  # Enable RFC 8707 resource validation when --oauth-strict is set
     )
 
+    # Extract hostname from server_url for transport security
+    parsed_url = urlparse(server_url)
+    allowed_host = parsed_url.netloc  # e.g., "mcp.brooksmcmillin.com"
+
     # Create FastMCP server with OAuth-protected endpoints
-    # Don't specify host - let it default and use resource_server_url for OAuth
     # Use public auth server URL for OAuth flows
+    # Configure transport_security to allow requests from the public hostname
     app = FastMCP(
         name="TaskManager MCP Server",
         instructions="TaskManager MCP Server with OAuth-protected tools and resources",
@@ -221,6 +227,9 @@ def create_resource_server(
             issuer_url=AnyHttpUrl(auth_server_public_url),
             required_scopes=DEFAULT_SCOPE,
             resource_server_url=AnyHttpUrl(server_url),
+        ),
+        transport_security=TransportSecuritySettings(
+            allowed_hosts=[allowed_host],
         ),
     )
 
@@ -943,8 +952,8 @@ def main(
             host="0.0.0.0",  # noqa: S104
             port=port,
             log_level="debug",
-            proxy_headers=True,
-            forwarded_allow_ips="*",
+            proxy_headers=False,
+            # forwarded_allow_ips="127.0.0.1",
             access_log=True,
         )
         logger.info("Server stopped")
