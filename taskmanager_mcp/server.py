@@ -19,6 +19,25 @@ from .token_verifier import IntrospectionTokenVerifier
 logger = logging.getLogger(__name__)
 
 
+class NormalizePathMiddleware:
+    """ASGI middleware to normalize paths so /mcp and /mcp/ work identically.
+
+    Strips trailing slashes from all paths (except root) before routing.
+    """
+
+    def __init__(self, app: Any) -> None:
+        self.app = app
+
+    async def __call__(self, scope: dict[str, Any], receive: Any, send: Any) -> Any:
+        if scope["type"] == "http":
+            path = scope.get("path", "/")
+            # Normalize: strip trailing slash if path is not just "/"
+            if path != "/" and path.endswith("/"):
+                scope = dict(scope)
+                scope["path"] = path.rstrip("/")
+        await self.app(scope, receive, send)
+
+
 def create_logging_middleware(app: Any) -> Callable[[dict[str, Any], Any, Any], Any]:
     """Create ASGI middleware to log detailed request information for debugging.
 
@@ -866,9 +885,17 @@ def main(
         Exit code (0 for success, 1 for error)
     """
 
-    logging.basicConfig(
-        level=logging.DEBUG, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-    )
+    # Configure logging with timestamps for all loggers including uvicorn
+    log_format = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    logging.basicConfig(level=logging.DEBUG, format=log_format)
+
+    # Also configure uvicorn loggers to use the same format
+    for logger_name in ["uvicorn", "uvicorn.error", "uvicorn.access"]:
+        uv_logger = logging.getLogger(logger_name)
+        uv_logger.handlers = []
+        handler = logging.StreamHandler()
+        handler.setFormatter(logging.Formatter(log_format))
+        uv_logger.addHandler(handler)
 
     try:
         # If no server specified, use environment variable or default
@@ -904,14 +931,21 @@ def main(
         # FastMCP handles CORS internally for discovery endpoints
         import uvicorn
 
+        # Get the Starlette app (streamable_http_app is a method, not a property)
+        starlette_app = mcp_server.streamable_http_app()
+
+        # Wrap app with middleware so /mcp and /mcp/ work identically
+        app = NormalizePathMiddleware(starlette_app)
+
         # Configure uvicorn to handle proxy headers properly
         uvicorn.run(
-            mcp_server.streamable_http_app,
+            app,
             host="0.0.0.0",  # noqa: S104
             port=port,
-            log_level="info",
+            log_level="debug",
             proxy_headers=True,
             forwarded_allow_ips="*",
+            access_log=True,
         )
         logger.info("Server stopped")
         return 0
