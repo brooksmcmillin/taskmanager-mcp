@@ -17,9 +17,9 @@ from starlette.applications import Starlette
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
+from taskmanager_sdk import AuthenticationError, TaskManagerClient
 from uvicorn import Config, Server
 
-from .task_api import TaskManagerAPI
 from .taskmanager_oauth_provider import TaskManagerAuthSettings, TaskManagerOAuthProvider
 from .token_storage import TokenStorage
 
@@ -50,7 +50,7 @@ class TaskManagerAuthProvider(
 
 
 # API client for backend database operations
-api_client: TaskManagerAPI | None = None
+api_client: TaskManagerClient | None = None
 
 
 def load_registered_clients() -> dict[str, Any]:
@@ -473,6 +473,19 @@ def create_authorization_server(
                 status_code=500,
             )
 
+        # Validate that client_data is a dictionary before calling .get()
+        if not isinstance(client_data, dict):
+            logger.error(
+                f"Invalid client data type from API: expected dict, got {type(client_data).__name__}. Value: {client_data!r}"
+            )
+            return JSONResponse(
+                {
+                    "error": "server_error",
+                    "error_description": f"Backend returned invalid response format: expected JSON object, got {type(client_data).__name__}",
+                },
+                status_code=500,
+            )
+
         client_id = client_data.get("client_id") or client_data.get("clientId")
         client_secret = client_data.get("client_secret") or client_data.get("clientSecret")
 
@@ -699,12 +712,12 @@ def main(port: int, taskmanager_url: str, server_url: str | None = None) -> int:
 
     # Initialize API client for backend database operations
     global api_client
-    from .task_api import create_authenticated_client
+    from taskmanager_sdk import create_authenticated_client
 
-    api_client = create_authenticated_client(username, password, f"{taskmanager_url}/api")
-
-    if not api_client:
-        logger.error("Failed to authenticate with backend API")
+    try:
+        api_client = create_authenticated_client(username, password, f"{taskmanager_url}/api")
+    except AuthenticationError as e:
+        logger.error(f"Failed to authenticate with backend API: {e}")
         return 1
 
     # Verify the API client can make authenticated requests

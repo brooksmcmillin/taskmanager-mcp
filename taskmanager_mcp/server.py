@@ -14,11 +14,71 @@ from mcp.server.transport_security import TransportSecuritySettings
 from pydantic import AnyHttpUrl
 from starlette.requests import Request
 from starlette.responses import JSONResponse
+from taskmanager_sdk import ApiResponse, TaskManagerClient
 
-from .task_api import TaskManagerAPI
 from .token_verifier import IntrospectionTokenVerifier
 
 logger = logging.getLogger(__name__)
+
+
+def validate_list_response(response: ApiResponse, context: str) -> tuple[list[dict[str, Any]], str | None]:
+    """Validate that an API response contains a list of dictionaries.
+
+    Args:
+        response: The API response to validate
+        context: Description of what we're fetching (e.g., "projects", "tasks")
+
+    Returns:
+        Tuple of (validated list, error message or None)
+    """
+    if not response.success:
+        return [], response.error or f"Failed to fetch {context}"
+
+    data = response.data
+    if data is None:
+        return [], None  # Empty result, not an error
+
+    if not isinstance(data, list):
+        error_msg = f"Backend returned invalid {context} format: expected list, got {type(data).__name__}"
+        logger.error(f"{error_msg}. Value: {data!r}")
+        return [], error_msg
+
+    # Validate each item is a dict
+    validated = []
+    for i, item in enumerate(data):
+        if not isinstance(item, dict):
+            logger.warning(
+                f"Invalid {context} item at index {i}: expected dict, got {type(item).__name__}. Skipping."
+            )
+            continue
+        validated.append(item)
+
+    return validated, None
+
+
+def validate_dict_response(response: ApiResponse, context: str) -> tuple[dict[str, Any] | None, str | None]:
+    """Validate that an API response contains a dictionary.
+
+    Args:
+        response: The API response to validate
+        context: Description of what we're fetching (e.g., "task", "project")
+
+    Returns:
+        Tuple of (validated dict or None, error message or None)
+    """
+    if not response.success:
+        return None, response.error or f"Failed to fetch {context}"
+
+    data = response.data
+    if data is None:
+        return None, f"No {context} data returned from backend"
+
+    if not isinstance(data, dict):
+        error_msg = f"Backend returned invalid {context} format: expected dict, got {type(data).__name__}"
+        logger.error(f"{error_msg}. Value: {data!r}")
+        return None, error_msg
+
+    return data, None
 
 
 class NormalizePathMiddleware:
@@ -157,7 +217,7 @@ USERNAME = os.environ.get("TASKMANAGER_USERNAME", CLIENT_ID)
 PASSWORD = os.environ.get("TASKMANAGER_PASSWORD", CLIENT_SECRET)
 
 
-def get_api_client() -> TaskManagerAPI:
+def get_api_client() -> TaskManagerClient:
     """Get API client for authenticated user.
 
     Currently uses server credentials for all requests.
@@ -165,17 +225,18 @@ def get_api_client() -> TaskManagerAPI:
     user-specific authentication tokens.
 
     Returns:
-        TaskManagerAPI: Authenticated API client
-    """
+        TaskManagerClient: Authenticated API client
 
+    Raises:
+        AuthenticationError: If authentication fails
+        NetworkError: If unable to connect to backend
+    """
     # Use the public TaskManager URL for API calls
-    task_manager = TaskManagerAPI(base_url=f"{TASKMANAGER_URL}/api")
+    task_manager = TaskManagerClient(base_url=f"{TASKMANAGER_URL}/api")
 
     # Use username/password for API authentication
-    response = task_manager.login(USERNAME, PASSWORD)
-    if not response.success:
-        logger.error(f"Failed to authenticate with TaskManager API: {response.error}")
-        raise Exception(f"API authentication failed: {response.error}")
+    # SDK raises AuthenticationError on failure
+    task_manager.login(USERNAME, PASSWORD)
     logger.debug("Successfully authenticated with TaskManager API")
     return task_manager
 
@@ -418,6 +479,128 @@ def create_resource_server(
         }
 
     @app.tool()
+    async def check_task_system_status() -> dict[str, Any]:
+        """
+        Check the health and operational status of the task management backend.
+
+        Verifies connectivity to the backend API and returns status information
+        about each major subsystem. Use this tool before performing operations
+        to diagnose system availability issues.
+
+        Returns:
+            JSON object with overall status and individual component checks:
+            - overall_status: "healthy", "degraded", or "unhealthy"
+            - backend_api: Backend API connectivity status
+            - projects_service: Projects/categories service status
+            - tasks_service: Tasks service status
+            - timestamp: When the check was performed
+            - message: Human-readable status summary
+        """
+        logger.info("=== check_task_system_status called ===")
+        now = datetime.datetime.now()
+        checks: dict[str, dict[str, Any]] = {}
+        errors: list[str] = []
+
+        try:
+            api_client = get_api_client()
+
+            # Check projects service
+            try:
+                projects_response = api_client.get_projects()
+                if projects_response.success:
+                    projects, proj_error = validate_list_response(projects_response, "projects")
+                    if proj_error:
+                        checks["projects_service"] = {
+                            "status": "degraded",
+                            "error": proj_error,
+                        }
+                        errors.append(f"Projects service: {proj_error}")
+                    else:
+                        checks["projects_service"] = {
+                            "status": "healthy",
+                            "project_count": len(projects),
+                        }
+                else:
+                    checks["projects_service"] = {
+                        "status": "unhealthy",
+                        "error": projects_response.error or "Request failed",
+                        "status_code": projects_response.status_code,
+                    }
+                    errors.append(f"Projects service: {projects_response.error}")
+            except Exception as e:
+                checks["projects_service"] = {
+                    "status": "unhealthy",
+                    "error": str(e),
+                }
+                errors.append(f"Projects service: {e}")
+
+            # Check tasks service
+            try:
+                tasks_response = api_client.get_todos()
+                if tasks_response.success:
+                    tasks, task_error = validate_list_response(tasks_response, "tasks")
+                    if task_error:
+                        checks["tasks_service"] = {
+                            "status": "degraded",
+                            "error": task_error,
+                        }
+                        errors.append(f"Tasks service: {task_error}")
+                    else:
+                        checks["tasks_service"] = {
+                            "status": "healthy",
+                            "task_count": len(tasks),
+                        }
+                else:
+                    checks["tasks_service"] = {
+                        "status": "unhealthy",
+                        "error": tasks_response.error or "Request failed",
+                        "status_code": tasks_response.status_code,
+                    }
+                    errors.append(f"Tasks service: {tasks_response.error}")
+            except Exception as e:
+                checks["tasks_service"] = {
+                    "status": "unhealthy",
+                    "error": str(e),
+                }
+                errors.append(f"Tasks service: {e}")
+
+            # Backend API is reachable if we got here
+            checks["backend_api"] = {"status": "healthy"}
+
+        except Exception as e:
+            # Complete backend failure
+            logger.error(f"Backend connectivity check failed: {e}", exc_info=True)
+            checks["backend_api"] = {
+                "status": "unhealthy",
+                "error": str(e),
+            }
+            checks["projects_service"] = {"status": "unknown"}
+            checks["tasks_service"] = {"status": "unknown"}
+            errors.append(f"Backend API: {e}")
+
+        # Determine overall status
+        statuses = [c.get("status") for c in checks.values()]
+        if all(s == "healthy" for s in statuses):
+            overall_status = "healthy"
+            message = "All systems operational"
+        elif any(s == "unhealthy" for s in statuses):
+            overall_status = "unhealthy"
+            message = f"System errors detected: {'; '.join(errors)}"
+        else:
+            overall_status = "degraded"
+            message = f"Some issues detected: {'; '.join(errors)}"
+
+        logger.info(f"Health check result: {overall_status}")
+        return {
+            "overall_status": overall_status,
+            "backend_api": checks.get("backend_api", {}),
+            "projects_service": checks.get("projects_service", {}),
+            "tasks_service": checks.get("tasks_service", {}),
+            "timestamp": now.isoformat(),
+            "message": message,
+        }
+
+    @app.tool()
     async def get_tasks(
         status: str | None = None,
         start_date: str | None = None,
@@ -429,7 +612,7 @@ def create_resource_server(
         Retrieve tasks with filtering options.
 
         Args:
-            status: Filter by status - one of "pending", "completed", "overdue", or "all"
+            status: Filter by status - one of "pending", "in_progress", "completed", "cancelled", "overdue", or "all"
             start_date: Filter tasks with due date on or after this date (ISO format, e.g., "2025-12-14")
             end_date: Filter tasks with due date on or before this date (ISO format, e.g., "2025-12-20")
             category: Filter by category/project name
@@ -447,96 +630,39 @@ def create_resource_server(
             api_client = get_api_client()
             logger.debug("API client created successfully")
 
-            # Get projects to map category names to IDs and for task category lookup
-            projects_response = api_client.get_projects()
-            projects_map: dict[int, str] = {}
-            category_to_project_id: dict[str, int] = {}
-            if projects_response.success and projects_response.data:
-                for project in projects_response.data:
-                    projects_map[project["id"]] = project["name"]
-                    category_to_project_id[project["name"].lower()] = project["id"]
-
-            # Build query params for API call
-            project_id = None
-            if category:
-                project_id = category_to_project_id.get(category.lower())
-                if project_id is None:
-                    logger.warning(f"Category '{category}' not found")
-
-            # Map status for API (handle "overdue" and "all" specially)
-            api_status = None
-            if status and status.lower() not in ("all", "overdue"):
-                api_status = status.lower()
-
-            response = api_client.get_todos(project_id=project_id, status=api_status)
+            # SDK handles all filtering server-side
+            response = api_client.get_todos(
+                status=status if status and status.lower() != "all" else None,
+                start_date=start_date,
+                end_date=end_date,
+                category=category,
+                limit=limit,
+            )
             logger.info(
                 f"get_todos response: success={response.success}, status={response.status_code}"
             )
 
-            if not response.success:
-                logger.error(f"Failed to get tasks: {response.error}")
-                return json.dumps({"error": response.error})
+            tasks, tasks_error = validate_list_response(response, "tasks")
+            if tasks_error:
+                logger.error(f"Failed to get tasks: {tasks_error}")
+                return json.dumps({"error": tasks_error})
 
-            tasks = response.data or []
-            logger.info(f"Retrieved {len(tasks)} tasks before filtering")
-
-            # Apply date filtering
-            filtered_tasks = []
-            now = datetime.datetime.now().date()
-            for task in tasks:
-                task_due_date = task.get("due_date")
-                if task_due_date:
-                    try:
-                        due_date = datetime.datetime.fromisoformat(
-                            task_due_date.replace("Z", "+00:00")
-                        ).date()
-
-                        # Filter by start_date
-                        if start_date:
-                            start = datetime.datetime.fromisoformat(start_date).date()
-                            if due_date < start:
-                                continue
-
-                        # Filter by end_date
-                        if end_date:
-                            end = datetime.datetime.fromisoformat(end_date).date()
-                            if due_date > end:
-                                continue
-
-                        # Filter overdue tasks
-                        if (
-                            status
-                            and status.lower() == "overdue"
-                            and (due_date >= now or task.get("status") == "completed")
-                        ):
-                            continue
-                    except ValueError:
-                        pass  # Skip date filtering if date parsing fails
-                elif status and status.lower() == "overdue":
-                    # Tasks without due dates can't be overdue
-                    continue
-
-                filtered_tasks.append(task)
-
-            # Apply limit
-            if limit and limit > 0:
-                filtered_tasks = filtered_tasks[:limit]
+            logger.info(f"Retrieved {len(tasks)} tasks")
 
             # Transform tasks to match expected output format
             result_tasks = []
-            for task in filtered_tasks:
+            for task in tasks:
+                task_id = task.get("id")
+                if task_id is None:
+                    continue  # Skip tasks without valid ID
                 result_tasks.append(
                     {
-                        "id": f"task_{task['id']}",
+                        "id": f"task_{task_id}",
                         "title": task.get("title", ""),
                         "description": task.get("description"),
                         "due_date": task.get("due_date"),
                         "status": task.get("status", "pending"),
-                        "category": (
-                            projects_map.get(task.get("project_id"))
-                            if task.get("project_id")
-                            else None
-                        ),
+                        "category": task.get("project_name") or task.get("category"),
                         "priority": task.get("priority", "medium"),
                         "tags": task.get("tags") or [],
                         "created_at": task.get("created_at"),
@@ -544,7 +670,7 @@ def create_resource_server(
                     }
                 )
 
-            logger.info(f"Returning {len(result_tasks)} tasks after filtering")
+            logger.info(f"Returning {len(result_tasks)} tasks")
             return json.dumps({"tasks": result_tasks})
         except Exception as e:
             logger.error(f"Exception in get_tasks: {e}", exc_info=True)
@@ -580,21 +706,10 @@ def create_resource_server(
             api_client = get_api_client()
             logger.debug("API client created successfully")
 
-            # Map category name to project_id
-            project_id = None
-            if category:
-                projects_response = api_client.get_projects()
-                if projects_response.success and projects_response.data:
-                    for project in projects_response.data:
-                        if project["name"].lower() == category.lower():
-                            project_id = project["id"]
-                            break
-                if project_id is None:
-                    logger.warning(f"Category '{category}' not found, task will have no category")
-
+            # SDK handles category-to-project mapping
             response = api_client.create_todo(
                 title=title,
-                project_id=project_id,
+                category=category,
                 description=description,
                 priority=priority,
                 due_date=due_date,
@@ -604,20 +719,21 @@ def create_resource_server(
                 f"create_todo response: success={response.success}, status={response.status_code}"
             )
 
-            if not response.success:
-                logger.error(f"Failed to create task: {response.error}")
-                return json.dumps({"error": response.error})
+            task, task_error = validate_dict_response(response, "created task")
+            if task_error:
+                logger.error(f"Failed to create task: {task_error}")
+                return json.dumps({"error": task_error})
 
-            task = response.data
             logger.info(f"Created task: {task}")
 
-            if task is None:
-                logger.warning("Task data is None")
-                return json.dumps({"error": "No data returned from create_todo"})
-
             # Return response in expected format
+            task_id = task.get("id")
+            if task_id is None:
+                logger.warning("Task data missing 'id' field")
+                return json.dumps({"error": "Created task has no ID"})
+
             result = {
-                "id": f"task_{task['id']}",
+                "id": f"task_{task_id}",
                 "title": task.get("title", title),
                 "status": "created",
             }
@@ -665,18 +781,6 @@ def create_resource_server(
             except ValueError:
                 return json.dumps({"error": f"Invalid task_id format: {task_id}"})
 
-            # Map category name to project_id if provided
-            project_id = None
-            if category:
-                projects_response = api_client.get_projects()
-                if projects_response.success and projects_response.data:
-                    for project in projects_response.data:
-                        if project["name"].lower() == category.lower():
-                            project_id = project["id"]
-                            break
-                if project_id is None:
-                    logger.warning(f"Category '{category}' not found")
-
             # Track which fields are being updated
             updated_fields = []
             if title is not None:
@@ -694,15 +798,16 @@ def create_resource_server(
             if tags is not None:
                 updated_fields.append("tags")
 
+            # SDK handles category-to-project mapping
             response = api_client.update_todo(
                 todo_id=todo_id,
                 title=title,
                 description=description,
+                category=category,
                 priority=priority,
                 status=status,
                 due_date=due_date,
                 tags=tags,
-                project_id=project_id,
             )
             logger.info(
                 f"update_todo response: success={response.success}, status={response.status_code}"
@@ -738,34 +843,29 @@ def create_resource_server(
             api_client = get_api_client()
             logger.debug("API client created successfully")
 
-            # Get all projects
-            projects_response = api_client.get_projects()
-            if not projects_response.success:
-                logger.error(f"Failed to get projects: {projects_response.error}")
-                return json.dumps({"error": projects_response.error})
+            # SDK provides dedicated endpoint with task counts
+            response = api_client.get_categories()
+            logger.info(
+                f"get_categories response: success={response.success}, status={response.status_code}"
+            )
 
-            projects = projects_response.data or []
+            # Response data contains categories list directly
+            if not response.success:
+                logger.error(f"Failed to get categories: {response.error}")
+                return json.dumps({"error": response.error})
 
-            # Get all tasks to count per category
-            todos_response = api_client.get_todos()
-            tasks = todos_response.data or [] if todos_response.success else []
+            data = response.data
+            if data is None:
+                return json.dumps({"categories": []})
 
-            # Count tasks per project
-            task_counts: dict[int, int] = {}
-            for task in tasks:
-                project_id = task.get("project_id")
-                if project_id:
-                    task_counts[project_id] = task_counts.get(project_id, 0) + 1
-
-            # Build categories list
-            categories = []
-            for project in projects:
-                categories.append(
-                    {
-                        "name": project["name"],
-                        "task_count": task_counts.get(project["id"], 0),
-                    }
-                )
+            # Handle both list format and dict with 'categories' key
+            if isinstance(data, list):
+                categories = data
+            elif isinstance(data, dict) and "categories" in data:
+                categories = data["categories"]
+            else:
+                logger.warning(f"Unexpected categories format: {type(data)}")
+                categories = []
 
             logger.info(f"Returning {len(categories)} categories")
             return json.dumps({"categories": categories})
@@ -779,9 +879,9 @@ def create_resource_server(
         category: str | None = None,
     ) -> str:
         """
-        Search tasks by keyword.
+        Search tasks by keyword using full-text search.
 
-        Searches task titles and descriptions for the given query string.
+        Searches task titles, descriptions, and tags for the given query string.
 
         Args:
             query: Search query string (required)
@@ -795,58 +895,54 @@ def create_resource_server(
             api_client = get_api_client()
             logger.debug("API client created successfully")
 
-            # Get projects for category mapping
-            projects_response = api_client.get_projects()
-            projects_map: dict[int, str] = {}
-            category_to_project_id: dict[str, int] = {}
-            if projects_response.success and projects_response.data:
-                for project in projects_response.data:
-                    projects_map[project["id"]] = project["name"]
-                    category_to_project_id[project["name"].lower()] = project["id"]
+            # SDK provides dedicated full-text search endpoint
+            response = api_client.search_tasks(query=query, category=category)
+            logger.info(
+                f"search_tasks response: success={response.success}, status={response.status_code}"
+            )
 
-            # Filter by category if provided
-            project_id = None
-            if category:
-                project_id = category_to_project_id.get(category.lower())
-
-            response = api_client.get_todos(project_id=project_id)
             if not response.success:
-                logger.error(f"Failed to get tasks: {response.error}")
+                logger.error(f"Failed to search tasks: {response.error}")
                 return json.dumps({"error": response.error})
 
-            tasks = response.data or []
+            data = response.data
+            if data is None:
+                return json.dumps({"tasks": [], "count": 0})
 
-            # Search in title and description
-            query_lower = query.lower()
-            matching_tasks = []
+            # Handle response format (could be list or dict with 'tasks' key)
+            if isinstance(data, list):
+                tasks = data
+            elif isinstance(data, dict):
+                tasks = data.get("tasks", [])
+            else:
+                logger.warning(f"Unexpected search response format: {type(data)}")
+                tasks = []
+
+            # Transform tasks to match expected output format
+            result_tasks = []
             for task in tasks:
-                title = task.get("title", "").lower()
-                description = (task.get("description") or "").lower()
-                tags = task.get("tags") or []
-                tags_text = " ".join(tags).lower()
+                if not isinstance(task, dict):
+                    continue
+                task_id = task.get("id")
+                if task_id is None:
+                    continue
+                result_tasks.append(
+                    {
+                        "id": f"task_{task_id}",
+                        "title": task.get("title", ""),
+                        "description": task.get("description"),
+                        "due_date": task.get("due_date"),
+                        "status": task.get("status", "pending"),
+                        "category": task.get("project_name") or task.get("category"),
+                        "priority": task.get("priority", "medium"),
+                        "tags": task.get("tags") or [],
+                        "created_at": task.get("created_at"),
+                        "updated_at": task.get("updated_at"),
+                    }
+                )
 
-                if query_lower in title or query_lower in description or query_lower in tags_text:
-                    matching_tasks.append(
-                        {
-                            "id": f"task_{task['id']}",
-                            "title": task.get("title", ""),
-                            "description": task.get("description"),
-                            "due_date": task.get("due_date"),
-                            "status": task.get("status", "pending"),
-                            "category": (
-                                projects_map.get(task.get("project_id"))
-                                if task.get("project_id")
-                                else None
-                            ),
-                            "priority": task.get("priority", "medium"),
-                            "tags": task.get("tags") or [],
-                            "created_at": task.get("created_at"),
-                            "updated_at": task.get("updated_at"),
-                        }
-                    )
-
-            logger.info(f"Found {len(matching_tasks)} tasks matching query '{query}'")
-            return json.dumps({"tasks": matching_tasks, "count": len(matching_tasks)})
+            logger.info(f"Found {len(result_tasks)} tasks matching query '{query}'")
+            return json.dumps({"tasks": result_tasks, "count": len(result_tasks)})
         except Exception as e:
             logger.error(f"Exception in search_tasks: {e}", exc_info=True)
             return json.dumps({"error": str(e)})

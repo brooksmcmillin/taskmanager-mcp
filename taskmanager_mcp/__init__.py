@@ -3,12 +3,21 @@
 OAuth-protected MCP server for TaskManager integration.
 """
 
-from taskmanager_mcp.task_api import ApiResponse, TaskManagerAPI, create_authenticated_client
+from taskmanager_sdk import (
+    ApiResponse,
+    TaskManagerClient,
+    create_authenticated_client,
+)
+
 from taskmanager_mcp.token_verifier import IntrospectionTokenVerifier
+
+# Backwards compatibility alias
+TaskManagerAPI = TaskManagerClient
 
 __all__ = [
     "ApiResponse",
     "TaskManagerAPI",
+    "TaskManagerClient",
     "create_authenticated_client",
     "IntrospectionTokenVerifier",
 ]
