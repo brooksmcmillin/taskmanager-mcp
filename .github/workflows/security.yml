@@ -25,17 +25,18 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v5
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
         with:
-          python-version: ${{ env.PYTHON_VERSION }}
-          cache: 'pip'
+          version: "latest"
+
+      - name: Set up Python
+        run: uv python install ${{ env.PYTHON_VERSION }}
 
       - name: Install dependencies
         run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install pip-audit safety bandit pip-licenses
+          uv sync --frozen
+          uv pip install pip-audit safety bandit pip-licenses
 
       # Pip Audit - Check for known vulnerabilities
       - name: Pip Audit
@@ -43,8 +44,8 @@ jobs:
         continue-on-error: true
         run: |
           echo "### Pip Audit Results ###" > security-report.txt
-          pip-audit --format json > pip-audit.json || true
-          pip-audit >> security-report.txt 2>&1 || true
+          uv run pip-audit --format json > pip-audit.json || true
+          uv run pip-audit >> security-report.txt 2>&1 || true
 
           # Check for vulnerabilities
           VULN_COUNT=$(cat pip-audit.json | jq '.dependencies[].vulns | length' | jq -s 'add // 0')
@@ -61,25 +62,25 @@ jobs:
         continue-on-error: true
         run: |
           echo -e "\n### Safety Check Results ###" >> security-report.txt
-          safety check --json > safety-report.json || true
-          safety check >> security-report.txt 2>&1 || echo "Safety check completed with warnings" >> security-report.txt
+          uv run safety check --json > safety-report.json || true
+          uv run safety check >> security-report.txt 2>&1 || echo "Safety check completed with warnings" >> security-report.txt
 
       # Bandit - Python security linter
       - name: Bandit Security Linting
         continue-on-error: true
         run: |
           echo -e "\n### Bandit Security Linting ###" >> security-report.txt
-          bandit -r . -f json -o bandit-report.json --exclude ./tests,./venv,./.venv,./node_modules || true
-          bandit -r . --exclude ./tests,./venv,./.venv,./node_modules >> security-report.txt 2>&1 || true
+          uv run bandit -r . -f json -o bandit-report.json --exclude ./tests,./venv,./.venv,./node_modules || true
+          uv run bandit -r . --exclude ./tests,./venv,./.venv,./node_modules >> security-report.txt 2>&1 || true
 
       # License Check
       - name: License Check
         continue-on-error: true
         run: |
           echo -e "\n### License Check ###" >> security-report.txt
-          pip-licenses --format=markdown >> security-report.txt
+          uv run pip-licenses --format=markdown >> security-report.txt
           echo -e "\n### Non-Standard Licenses ###" >> security-report.txt
-          pip-licenses --format=json | jq '.[] | select(.License | test("MIT|Apache|BSD|ISC|Python|MPL") | not)' >> security-report.txt || echo "All licenses appear standard" >> security-report.txt
+          uv run pip-licenses --format=json | jq '.[] | select(.License | test("MIT|Apache|BSD|ISC|Python|MPL") | not)' >> security-report.txt || echo "All licenses appear standard" >> security-report.txt
 
       # Secret Detection
       - name: Secret Detection

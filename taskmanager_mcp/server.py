@@ -21,12 +21,15 @@ from .token_verifier import IntrospectionTokenVerifier
 logger = logging.getLogger(__name__)
 
 
-def validate_list_response(response: ApiResponse, context: str) -> tuple[list[dict[str, Any]], str | None]:
+def validate_list_response(
+    response: ApiResponse, context: str, key: str | None = None
+) -> tuple[list[dict[str, Any]], str | None]:
     """Validate that an API response contains a list of dictionaries.
 
     Args:
         response: The API response to validate
         context: Description of what we're fetching (e.g., "projects", "tasks")
+        key: Optional key to extract list from wrapped response (e.g., "tasks" for {"tasks": [...]})
 
     Returns:
         Tuple of (validated list, error message or None)
@@ -38,8 +41,25 @@ def validate_list_response(response: ApiResponse, context: str) -> tuple[list[di
     if data is None:
         return [], None  # Empty result, not an error
 
+    # Handle wrapped responses like {"tasks": [...]} or {"categories": [...]}
+    if isinstance(data, dict):
+        # Try the provided key first, then the context as a key
+        for k in [key, context, f"{context}s"]:
+            if k and k in data:
+                data = data[k]
+                break
+        else:
+            # No matching key found - maybe it's a different structure
+            error_msg = (
+                f"Backend returned {context} as dict without expected key: {list(data.keys())}"
+            )
+            logger.error(error_msg)
+            return [], error_msg
+
     if not isinstance(data, list):
-        error_msg = f"Backend returned invalid {context} format: expected list, got {type(data).__name__}"
+        error_msg = (
+            f"Backend returned invalid {context} format: expected list, got {type(data).__name__}"
+        )
         logger.error(f"{error_msg}. Value: {data!r}")
         return [], error_msg
 
@@ -56,7 +76,9 @@ def validate_list_response(response: ApiResponse, context: str) -> tuple[list[di
     return validated, None
 
 
-def validate_dict_response(response: ApiResponse, context: str) -> tuple[dict[str, Any] | None, str | None]:
+def validate_dict_response(
+    response: ApiResponse, context: str
+) -> tuple[dict[str, Any] | None, str | None]:
     """Validate that an API response contains a dictionary.
 
     Args:
@@ -74,7 +96,9 @@ def validate_dict_response(response: ApiResponse, context: str) -> tuple[dict[st
         return None, f"No {context} data returned from backend"
 
     if not isinstance(data, dict):
-        error_msg = f"Backend returned invalid {context} format: expected dict, got {type(data).__name__}"
+        error_msg = (
+            f"Backend returned invalid {context} format: expected dict, got {type(data).__name__}"
+        )
         logger.error(f"{error_msg}. Value: {data!r}")
         return None, error_msg
 
@@ -849,23 +873,10 @@ def create_resource_server(
                 f"get_categories response: success={response.success}, status={response.status_code}"
             )
 
-            # Response data contains categories list directly
-            if not response.success:
-                logger.error(f"Failed to get categories: {response.error}")
-                return json.dumps({"error": response.error})
-
-            data = response.data
-            if data is None:
-                return json.dumps({"categories": []})
-
-            # Handle both list format and dict with 'categories' key
-            if isinstance(data, list):
-                categories = data
-            elif isinstance(data, dict) and "categories" in data:
-                categories = data["categories"]
-            else:
-                logger.warning(f"Unexpected categories format: {type(data)}")
-                categories = []
+            categories, categories_error = validate_list_response(response, "categories")
+            if categories_error:
+                logger.error(f"Failed to get categories: {categories_error}")
+                return json.dumps({"error": categories_error})
 
             logger.info(f"Returning {len(categories)} categories")
             return json.dumps({"categories": categories})
