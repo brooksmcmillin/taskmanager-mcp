@@ -751,14 +751,14 @@ def create_resource_server(
             logger.info(f"Created task: {task}")
 
             # Return response in expected format
-            task_id = task.get("id")
+            task_id = task.get("id") if task is not None else None
             if task_id is None:
                 logger.warning("Task data missing 'id' field")
                 return json.dumps({"error": "Created task has no ID"})
 
             result = {
                 "id": f"task_{task_id}",
-                "title": task.get("title", title),
+                "title": task.get("title", title) if task is not None else title,
                 "status": "created",
             }
             return json.dumps(result)
