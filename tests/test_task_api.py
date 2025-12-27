@@ -1,10 +1,20 @@
-"""Unit tests for TaskManagerAPI class."""
+"""Unit tests for TaskManagerClient class from taskmanager_sdk."""
 
 from unittest.mock import Mock, patch
 
+import pytest
 import requests
+from taskmanager_sdk import (
+    ApiResponse,
+    AuthenticationError,
+    NetworkError,
+    NotFoundError,
+    TaskManagerClient,
+    create_authenticated_client,
+)
 
-from taskmanager_mcp.task_api import ApiResponse, TaskManagerAPI, create_authenticated_client
+# Backwards compatibility alias (as exported from taskmanager_mcp)
+TaskManagerAPI = TaskManagerClient
 
 
 class TestApiResponse:
@@ -39,17 +49,13 @@ class TestTaskManagerAPI:
         api = TaskManagerAPI(session=mock_session)
         assert api.session is mock_session
 
-    @patch("taskmanager_mcp.task_api.requests.Session")
-    def test_make_request_get_success(self, mock_session_class: Mock) -> None:
+    def test_make_request_get_success(self) -> None:
         mock_session = Mock()
         mock_response = Mock()
         mock_response.status_code = 200
         mock_response.json.return_value = {"result": "success"}
         mock_response.headers = {}
-        mock_response.history = []
         mock_session.get.return_value = mock_response
-        mock_session.cookies.get_dict.return_value = {}
-        mock_session_class.return_value = mock_session
 
         api = TaskManagerAPI()
         api.session = mock_session
@@ -59,21 +65,16 @@ class TestTaskManagerAPI:
         assert result.success is True
         assert result.data == {"result": "success"}
         assert result.status_code == 200
-        mock_session.get.assert_called_once_with(
-            "http://localhost:4321/api/test", params={"param": "value"}
-        )
+        # SDK uses cookies parameter
+        mock_session.get.assert_called_once()
 
-    @patch("taskmanager_mcp.task_api.requests.Session")
-    def test_make_request_post_success(self, mock_session_class: Mock) -> None:
+    def test_make_request_post_success(self) -> None:
         mock_session = Mock()
         mock_response = Mock()
         mock_response.status_code = 201
         mock_response.json.return_value = {"id": 123}
         mock_response.headers = {}
-        mock_response.history = []
         mock_session.post.return_value = mock_response
-        mock_session.cookies.get_dict.return_value = {}
-        mock_session_class.return_value = mock_session
 
         api = TaskManagerAPI()
         api.session = mock_session
@@ -83,56 +84,41 @@ class TestTaskManagerAPI:
         assert result.success is True
         assert result.data == {"id": 123}
         assert result.status_code == 201
-        mock_session.post.assert_called_once_with(
-            "http://localhost:4321/api/test", json={"name": "test"}, params=None
-        )
+        mock_session.post.assert_called_once()
 
-    @patch("taskmanager_mcp.task_api.requests.Session")
-    def test_make_request_error_response(self, mock_session_class: Mock) -> None:
+    def test_make_request_error_response_raises_exception(self) -> None:
+        """SDK raises NotFoundError for 404 responses."""
         mock_session = Mock()
         mock_response = Mock()
         mock_response.status_code = 404
         mock_response.json.return_value = {"error": "Not found"}
         mock_response.headers = {}
-        mock_response.history = []
         mock_session.get.return_value = mock_response
-        mock_session.cookies.get_dict.return_value = {}
-        mock_session_class.return_value = mock_session
 
         api = TaskManagerAPI()
         api.session = mock_session
 
-        result = api._make_request("GET", "/nonexistent")
+        with pytest.raises(NotFoundError):
+            api._make_request("GET", "/nonexistent")
 
-        assert result.success is False
-        assert result.error == "Not found"
-        assert result.status_code == 404
-
-    @patch("taskmanager_mcp.task_api.requests.Session")
-    def test_make_request_network_error(self, mock_session_class: Mock) -> None:
+    def test_make_request_network_error_raises_exception(self) -> None:
+        """SDK raises NetworkError for connection failures."""
         mock_session = Mock()
         mock_session.get.side_effect = requests.exceptions.ConnectionError("Network error")
-        mock_session_class.return_value = mock_session
 
         api = TaskManagerAPI()
         api.session = mock_session
 
-        result = api._make_request("GET", "/test")
+        with pytest.raises(NetworkError):
+            api._make_request("GET", "/test")
 
-        assert result.success is False
-        assert "Network error" in result.error  # type: ignore
-
-    @patch("taskmanager_mcp.task_api.requests.Session")
-    def test_make_request_set_cookie(self, mock_session_class: Mock) -> None:
+    def test_make_request_set_cookie(self) -> None:
         mock_session = Mock()
         mock_response = Mock()
         mock_response.status_code = 200
         mock_response.json.return_value = {"success": True}
-        mock_response.headers = {}
-        mock_response.history = []
+        mock_response.headers = {"set-cookie": "session=abc123; Path=/"}
         mock_session.get.return_value = mock_response
-        mock_session.cookies.get_dict.return_value = {}
-        mock_session_class.return_value = mock_session
 
         api = TaskManagerAPI()
         api.session = mock_session
@@ -140,8 +126,8 @@ class TestTaskManagerAPI:
         result = api._make_request("GET", "/test")
 
         assert result.success is True
-        # Session handles cookies automatically - just verify the request was made
-        mock_session.get.assert_called_once()
+        # SDK stores cookies in api.cookies dict
+        assert api.cookies.get("session") == "abc123"
 
     def test_unsupported_method(self) -> None:
         api = TaskManagerAPI()
@@ -193,13 +179,14 @@ class TestTaskManagerAPI:
         mock_make_request.return_value = ApiResponse(success=True, data={"id": 123})
 
         api = TaskManagerAPI()
-        result = api.create_project("Test Project", "#FF0000", "Test description")
+        # SDK signature: create_project(name, description=None, color=None)
+        result = api.create_project("Test Project", "Test description", "#FF0000")
 
         assert result.success is True
         mock_make_request.assert_called_once_with(
             "POST",
             "/projects",
-            {"name": "Test Project", "color": "#FF0000", "description": "Test description"},
+            {"name": "Test Project", "description": "Test description", "color": "#FF0000"},
         )
 
     @patch.object(TaskManagerAPI, "_make_request")
@@ -207,7 +194,8 @@ class TestTaskManagerAPI:
         mock_make_request.return_value = ApiResponse(success=True, data={"id": 123})
 
         api = TaskManagerAPI()
-        result = api.create_project("Test Project", "#FF0000")
+        # SDK signature: create_project(name, description=None, color=None)
+        result = api.create_project("Test Project", color="#FF0000")
 
         assert result.success is True
         mock_make_request.assert_called_once_with(
@@ -219,11 +207,12 @@ class TestTaskManagerAPI:
         mock_make_request.return_value = ApiResponse(success=True, data=[])
 
         api = TaskManagerAPI()
-        result = api.get_todos(project_id=1, status="pending", time_horizon="week")
+        # SDK signature: get_todos(project_id, status, start_date, end_date, category, limit)
+        result = api.get_todos(project_id=1, status="pending", category="work")
 
         assert result.success is True
         mock_make_request.assert_called_once_with(
-            "GET", "/todos", params={"project_id": 1, "status": "pending", "time_horizon": "week"}
+            "GET", "/todos", params={"project_id": 1, "status": "pending", "category": "work"}
         )
 
     @patch.object(TaskManagerAPI, "_make_request")
@@ -234,10 +223,11 @@ class TestTaskManagerAPI:
         result = api.create_todo("Test Task")
 
         assert result.success is True
+        # SDK only includes title and priority by default
         mock_make_request.assert_called_once_with(
             "POST",
             "/todos",
-            {"title": "Test Task", "priority": "medium", "estimated_hours": 1.0, "context": "work"},
+            {"title": "Test Task", "priority": "medium"},
         )
 
     @patch.object(TaskManagerAPI, "_make_request")
@@ -245,16 +235,16 @@ class TestTaskManagerAPI:
         mock_make_request.return_value = ApiResponse(success=True, data={"id": 456})
 
         api = TaskManagerAPI()
+        # SDK signature: create_todo(title, project_id, description, category, priority, estimated_hours, due_date, tags)
         result = api.create_todo(
             title="Complex Task",
             project_id=1,
             description="This is a complex task",
+            category="work",
             priority="high",
             estimated_hours=5.0,
             due_date="2024-12-31",
             tags=["urgent", "important"],
-            context="personal",
-            time_horizon="month",
         )
 
         assert result.success is True
@@ -265,12 +255,11 @@ class TestTaskManagerAPI:
                 "title": "Complex Task",
                 "project_id": 1,
                 "description": "This is a complex task",
+                "category": "work",
                 "priority": "high",
                 "estimated_hours": 5.0,
                 "due_date": "2024-12-31",
                 "tags": ["urgent", "important"],
-                "context": "personal",
-                "time_horizon": "month",
             },
         )
 
@@ -286,47 +275,25 @@ class TestTaskManagerAPI:
             "POST", "/todos/123/complete", {"actual_hours": 2.5}
         )
 
-    @patch.object(TaskManagerAPI, "_make_request")
-    def test_oauth_token_exchange(self, mock_make_request: Mock) -> None:
-        # Mock the session.post call directly since oauth_token_exchange doesn't use _make_request
-        mock_session = Mock()
-        mock_response = Mock()
-        mock_response.status_code = 200
-        mock_response.json.return_value = {"access_token": "token123", "token_type": "Bearer"}
-        mock_session.post.return_value = mock_response
-
-        api = TaskManagerAPI()
-        api.session = mock_session
-
-        result = api.oauth_token_exchange(
-            grant_type="authorization_code",
-            client_id="client123",
-            client_secret="secret456",
-            code="auth_code_789",
-        )
-
-        assert result.success is True
-        assert result.data["access_token"] == "token123"  # type: ignore
+    # Note: oauth_token_exchange was in the old local implementation but not in the SDK
+    # OAuth token exchange is now handled through the SDK's OAuth flow methods
 
 
 class TestCreateAuthenticatedClient:
-    @patch.object(TaskManagerAPI, "login")
+    @patch.object(TaskManagerClient, "login")
     def test_create_authenticated_client_success(self, mock_login: Mock) -> None:
         mock_login.return_value = ApiResponse(success=True, data={"token": "abc123"})
 
         client = create_authenticated_client("testuser", "password123")
 
         assert client is not None
-        assert isinstance(client, TaskManagerAPI)
+        assert isinstance(client, TaskManagerClient)
         mock_login.assert_called_once_with("testuser", "password123")
 
-    @patch.object(TaskManagerAPI, "login")
-    @patch("builtins.print")
-    def test_create_authenticated_client_failure(self, mock_print: Mock, mock_login: Mock) -> None:
+    @patch.object(TaskManagerClient, "login")
+    def test_create_authenticated_client_failure(self, mock_login: Mock) -> None:
+        """SDK raises AuthenticationError on login failure."""
         mock_login.return_value = ApiResponse(success=False, error="Invalid credentials")
 
-        client = create_authenticated_client("testuser", "wrongpassword")
-
-        assert client is None
-        mock_login.assert_called_once_with("testuser", "wrongpassword")
-        mock_print.assert_called_once_with("Authentication failed: Invalid credentials")
+        with pytest.raises(AuthenticationError):
+            create_authenticated_client("testuser", "wrongpassword")

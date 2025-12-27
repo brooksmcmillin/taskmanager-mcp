@@ -4,14 +4,20 @@ FROM python:3.13-slim
 # Set working directory
 WORKDIR /app
 
-# Copy dependency files
-COPY requirements.txt ./
-
-# Install git (needed for git-based pip dependencies) and dependencies
-RUN apt-get update && apt-get install -y --no-install-recommends git \
-    && pip install --no-cache-dir -r requirements.txt \
-    && apt-get purge -y git && apt-get autoremove -y \
+# Install uv and git
+RUN apt-get update && apt-get install -y --no-install-recommends git curl \
+    && curl -LsSf https://astral.sh/uv/install.sh | sh \
+    && apt-get purge -y curl && apt-get autoremove -y \
     && rm -rf /var/lib/apt/lists/*
+
+# Add uv to PATH
+ENV PATH="/root/.local/bin:$PATH"
+
+# Copy dependency files first for better caching
+COPY pyproject.toml uv.lock ./
+
+# Install dependencies using uv (uses uv.lock for reproducible builds)
+RUN uv sync --frozen --no-dev
 
 # Copy application code
 COPY . .
@@ -20,4 +26,4 @@ COPY . .
 EXPOSE 8001 9000
 
 # Default command (can be overridden in docker-compose)
-CMD ["python", "-m", "taskmanager_mcp.server"]
+CMD ["uv", "run", "python", "-m", "taskmanager_mcp.server"]
